@@ -238,11 +238,118 @@ All Gradle commands were run with `JAVA_HOME=~/.sdkman/candidates/java/25.0.1-zu
   `01-main-graph.png`, `02-changes-staged-unstaged.png`, `02b-changes-after-stage.png`,
   `02c-discard-staged-index-only.png`, `03-commit-panel-diff.png`, `04-refs-query.png`,
   `04b-query-error.png`, `05-tab-switch.png`, `06-push-pull-stderr.png`, `07-commit-success.png`.
-- `temp/` was not modified. No Phase 3 integration or Phase 4 work was started.
+- `temp/` was not modified. Phase 3 began only after this Phase 2 gate was green.
 
 ## Phase 3 — Integration
 
-Not started.
+### Preflight
+
+- [x] `./gradlew :core:test` → **BUILD SUCCESSFUL** (238 tests at the time)
+- [x] `./gradlew check` → **BUILD SUCCESSFUL**
+- [x] `./gradlew build` → **BUILD SUCCESSFUL**
+- [x] 10 screenshots present in `app/build/screenshots/`
+- [x] App was still fake-backed (`DemoGitBackend`/`DemoWatcher` in `Main.kt`)
+
+### Workstreams and ownership
+
+Three subagents were optimal: GIT/WATCH and UI are disjoint and ran in parallel, while QA required
+the merged real wiring for end-to-end acceptance. SESSION was not needed because no contract change
+was required.
+
+| Workstream | Subagent | Owned paths | Result |
+|---|---|---|---|
+| GIT/WATCH | 1 | `core/git/**`, `core/watch/**`, their tests/resources | Real backend/watcher fixes, 121 GIT/WATCH tests |
+| UI | 2 | `app/src/main/**`, `app/src/test/**/ui/**` | Real `SessionManager` wiring, 38 UI tests, real-repo UI flow |
+| QA | 3 | `core/src/test/**/acceptance/**`, `app/src/test/**/acceptance/**` | Real oracles, watcher, watcher-disabled, push/pull, end-to-end app acceptance |
+
+### GIT/WATCH
+
+- [x] Concurrent stdin/stdout/stderr handling; no large-log deadlock
+- [x] Bounded process shutdown, descendant kill, stream closure; no hung processes
+- [x] Cleared inherited repository-selection environment variables
+- [x] Index-only removal uses `git rm --cached -f` for staged additions (worktree untouched)
+- [x] Porcelain-v2 `.` normalized to `' '` in `StatusEntry`
+- [x] Watcher `OVERFLOW` emits `REFS_CHANGED`; failed starts and stops clean up threads/services
+- [x] Real watcher integration: refs, checkout, packed-refs after `git gc`, index/status,
+  operation/rebase files, worktree exclusions, no `objects/`, debounce, cap, stop cleanup
+- Evidence: `./gradlew :core:test --rerun-tasks` → **BUILD SUCCESSFUL**, 265 tests on the workstream
+  branch; GIT/WATCH suites 121 tests (GIT 88, WATCH 33), 0 failures.
+
+### UI
+
+- [x] Production `Main.kt` uses real `SessionManager` defaults: `CliGitBackend`, `JdkRepoWatcher`,
+  `JsonSessionPersistence`; `DemoBackend.kt` removed
+- [x] Optional startup repository path; directory chooser opens a real session
+- [x] Empty/loading/unavailable/error states preserved; real Git stderr shown
+- [x] Real-repository UI test: graph, commit detail/files/diff, stage, discard with confirmation,
+  commit, and manual refresh without watcher events
+- [x] UI tests still inject fakes; fakes remain test-only
+- Evidence: `./gradlew :app:test --rerun-tasks` → **BUILD SUCCESSFUL**; 38 app tests, 0 failures.
+  `:app:build` green. Real app launched against a temporary repository:
+  `APP_RUNNING_WITH_REAL_REPO pid=50955`, then `APP_STOPPED`.
+
+### QA
+
+- [x] Fixed stale `'.'` acceptance assertions to the normalized `' '` convention
+- [x] Real Git oracles extended for statuses, writes, refs, commit detail, rename, push/pull errors
+- [x] Real `JdkRepoWatcher` acceptance: branches, checkout, `git gc`, operation files, exclusions,
+  ignored `objects/`, debounce, stop cleanup
+- [x] Watcher-disabled session acceptance: silent watcher and failed-start watcher; explicit
+  refresh/after-write refresh, stage/unstage/commit, checkout, 3 s polling fallback
+- [x] Local bare-repo push/pull acceptance: missing upstream, push, fast-forward, divergence/rejection
+- [x] End-to-end app acceptance with real `CliGitBackend` and real `JdkRepoWatcher`:
+  graph → select → diff → stage/discard → commit → toolbar push → fast-forward pull
+- Evidence: `./gradlew :core:test :app:test --rerun-tasks` → **BUILD SUCCESSFUL**;
+  279 core tests + 40 app tests, 0 failures/errors. `check` and `build` green.
+
+### Integration and final gate
+
+- [x] Merged `phase3/gitwatch`
+- [x] Merged `phase3/ui`
+- [x] Merged `phase3/qa`
+- [x] `./gradlew clean :core:test check build --rerun-tasks --no-build-cache`
+- [x] Exact `./gradlew :core:test`, `./gradlew check`, and `./gradlew build` run by the main agent
+- [x] Direct real-repository launch verified by the main agent
+
+### Phase 3 command log
+
+All Gradle commands were run with `JAVA_HOME=~/.sdkman/candidates/java/25.0.1-zulu` and that JDK's
+`bin` directory first on `PATH`.
+
+| Command / action | Result |
+|---|---|
+| Preflight `./gradlew :core:test` / `check` / `build` | All **BUILD SUCCESSFUL**; 238 core tests, 10 screenshots; app still fake-backed |
+| Worktrees `phase3-gitwatch`, `phase3-ui`; `phase3-qa` after integration | Three isolated branches |
+| `phase3-gitwatch`: `./gradlew :core:test --rerun-tasks` | **BUILD SUCCESSFUL** in 1m44s; 265 tests, GIT/WATCH 121, 0 failures |
+| `phase3-gitwatch`: `./gradlew :core:build --rerun-tasks` | **BUILD SUCCESSFUL** |
+| GIT follow-up: normalize porcelain-v2 `.` | Parser + goldens updated; GIT/WATCH 121 tests green |
+| `phase3-ui`: `./gradlew :app:test --rerun-tasks` | **BUILD SUCCESSFUL**; 38 app tests, 0 failures |
+| `phase3-ui`: `./gradlew :app:build --rerun-tasks` | **BUILD SUCCESSFUL** |
+| Main: `git merge --no-ff phase3/gitwatch` | Merged, no conflicts |
+| Main: `git merge --no-ff phase3/ui` | Merged, no conflicts |
+| `phase3-qa`: `./gradlew :core:test :app:test --rerun-tasks` | **BUILD SUCCESSFUL** in 2m34s; 279 core + 40 app tests |
+| Main: `git merge --no-ff phase3/qa` | Merged, no conflicts |
+| Main final gate: `./gradlew clean :core:test check build --rerun-tasks --no-build-cache` | **BUILD SUCCESSFUL in 2m30s**; 17/17 tasks executed |
+| Main exact gate: `./gradlew :core:test` | **BUILD SUCCESSFUL**; exit 0 |
+| Main exact gate: `./gradlew check` | **BUILD SUCCESSFUL**; exit 0 |
+| Main exact gate: `./gradlew build` | **BUILD SUCCESSFUL**; exit 0 |
+| Real app launch against temporary repo | `APP_RUNNING_WITH_REAL_REPO pid=50955`; stopped cleanly (`APP_STOPPED`) |
+| Final test report | 279 core + 40 app tests, **0 failures, 0 errors** |
+| Quality scans | No fakes in production; real `SessionManager` defaults confirmed; no dp/sp outside `GraphStyle.kt`; no TODO/FIXME; no empty catches |
+| Worktree cleanup | Three merged Phase 3 worktrees removed; `phase3/*` branches retained |
+
+### Phase 3 final verification
+
+- `./gradlew clean :core:test check build --rerun-tasks --no-build-cache` → `BUILD SUCCESSFUL`;
+  17/17 tasks executed.
+- `./gradlew :core:test` → `BUILD SUCCESSFUL`; 279 tests, 0 failures.
+- `./gradlew check` → `BUILD SUCCESSFUL`; includes 40 app tests.
+- `./gradlew build` → `BUILD SUCCESSFUL`.
+- Oracle, watcher, push/pull, watcher-disabled, and real-app acceptance suites all green.
+- Production `Main.kt` opens a real repository with real `CliGitBackend`/`JdkRepoWatcher`; fakes are
+  test-only.
+- Phase 2 screenshots are regenerated by the smoke suite (10 PNGs in `app/build/screenshots/`).
+- `temp/` was not modified. No Phase 4 benchmarking or packaging work was started.
 
 ## Phase 4 — Hardening
 
