@@ -124,6 +124,10 @@ class RepoSession(
 
     private var selectionJob: Job? = null
     private var diffJob: Job? = null
+    private var diffSequence = 0L
+
+    @Volatile
+    private var openDiffUnlimited = false
 
     @Volatile
     private var scrollAnchorIndex = 0
@@ -159,6 +163,7 @@ class RepoSession(
             selectionJob = null
             diffJob?.cancel()
             diffJob = null
+            diffSequence++
             graphLoadJob?.cancel()
             graphLoadJob = null
             pollingJob?.cancel()
@@ -167,6 +172,9 @@ class RepoSession(
                 SessionPhase.INACTIVE
             } else {
                 SessionPhase.DRAINING
+            }
+            if (_state.value.graph?.complete == true) {
+                _state.update { it.copy(load = LoadState.Idle) }
             }
         }
         scope?.cancel()
@@ -231,6 +239,8 @@ class RepoSession(
             selectionJob = null
             diffJob?.cancel()
             diffJob = null
+            diffSequence++
+            openDiffUnlimited = false
             _state.update {
                 it.copy(
                     selection = selection,
@@ -251,29 +261,34 @@ class RepoSession(
 
     fun clearSelection() = select(Selection.None)
 
-    fun openDiff(target: DiffTarget) {
-        _state.update { it.copy(openDiffTarget = target, openDiff = null) }
-        val context = activeReadContext() ?: return
+    fun openDiff(target: DiffTarget, unlimited: Boolean = false) {
+        val context = activeReadContext()
         synchronized(lock) {
-            if (!isCurrentLocked(context.activation)) return
+            diffSequence++
+            val sequence = diffSequence
+            openDiffUnlimited = unlimited
             diffJob?.cancel()
+            diffJob = null
+            _state.update { it.copy(openDiffTarget = target, openDiff = null) }
+            if (context == null || !isCurrentLocked(context.activation)) return
             diffJob = context.scope.launch {
                 val backend = try {
                     git()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    reportReadError(context.activation, "Diff", e)
+                    reportDiffError(context.activation, sequence, e)
                     return@launch
                 }
                 val diff = try {
-                    backend.diff(target)
+                    backend.diff(target, unlimited)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    reportReadError(context.activation, "Diff", e)
+                    reportDiffError(context.activation, sequence, e)
                     return@launch
                 }
+                if (!isCurrentDiff(context.activation, sequence)) return@launch
                 publishRead(context.activation) { it.copy(openDiff = diff, openDiffTarget = target) }
             }
         }
@@ -281,6 +296,8 @@ class RepoSession(
 
     fun closeDiff() {
         synchronized(lock) {
+            diffSequence++
+            openDiffUnlimited = false
             diffJob?.cancel()
             diffJob = null
             _state.update { it.copy(openDiff = null, openDiffTarget = null) }
@@ -304,12 +321,14 @@ class RepoSession(
 
     fun stage(paths: List<String>): Job {
         if (paths.isEmpty()) return rejected("No paths to stage.")
-        return launchWrite(BusyOp.STAGE) { it.stage(paths) }
+        val filtered = withoutConflicts(paths) ?: return rejected("Cannot stage unmerged paths.")
+        return launchWrite(BusyOp.STAGE) { it.stage(filtered) }
     }
 
     fun unstage(paths: List<String>): Job {
         if (paths.isEmpty()) return rejected("No paths to unstage.")
-        return launchWrite(BusyOp.STAGE) { it.unstage(paths) }
+        val filtered = withoutConflicts(paths) ?: return rejected("Cannot unstage unmerged paths.")
+        return launchWrite(BusyOp.STAGE) { it.unstage(filtered) }
     }
 
     fun discardStaged(paths: List<String>): Job {
@@ -353,6 +372,7 @@ class RepoSession(
             graphSpec = null
             graphRefs = null
             graphHead = null
+            openDiffUnlimited = false
             _state.update {
                 it.copy(
                     graph = null,
@@ -437,6 +457,11 @@ class RepoSession(
             val selection = _state.value.selection
             if (selection is Selection.Commit && _state.value.commitDetail == null) {
                 loadCommitDetails(selection.hash)
+            }
+
+            val diffTarget = _state.value.openDiffTarget
+            if (diffTarget != null && _state.value.openDiff == null) {
+                openDiff(diffTarget, openDiffUnlimited)
             }
         }
     }
@@ -936,22 +961,26 @@ class RepoSession(
         writeMutex.withLock {
             _state.update { it.copy(busy = op, message = null) }
             try {
-                val backend = git()
-                val result = action(backend)
-                _state.update { it.copy(message = writeMessage(op, result)) }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _state.update { it.copy(message = UserMessage.Error(describe(e), stderr(e))) }
+                try {
+                    val backend = git()
+                    val result = action(backend)
+                    _state.update { it.copy(message = writeMessage(op, result)) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    _state.update { it.copy(message = UserMessage.Error(describe(e), stderr(e))) }
+                }
+                try {
+                    refreshAfterWrite()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Throwable) {
+                    _state.update {
+                        it.copy(message = UserMessage.Error("Could not refresh after the write. ${describe(e)}", stderr(e)))
+                    }
+                }
             } finally {
                 _state.update { it.copy(busy = null) }
-            }
-            try {
-                refreshAfterWrite()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Throwable) {
-                _state.update { it.copy(message = UserMessage.Error("Could not refresh after the write. ${describe(e)}", stderr(e))) }
             }
         }
     }
@@ -1078,6 +1107,15 @@ class RepoSession(
             return
         }
         publishRead(activation) { it.copy(message = message) }
+    }
+
+    private fun reportDiffError(activation: Int, sequence: Long, error: Throwable) {
+        if (!isCurrentDiff(activation, sequence)) return
+        reportReadError(activation, "Diff", error)
+    }
+
+    private fun isCurrentDiff(activation: Int, sequence: Long): Boolean = synchronized(lock) {
+        isCurrentLocked(activation) && diffSequence == sequence
     }
 
     private fun isCurrent(activation: Int): Boolean = synchronized(lock) { isCurrentLocked(activation) }

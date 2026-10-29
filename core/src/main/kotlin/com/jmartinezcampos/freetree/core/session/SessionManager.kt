@@ -32,6 +32,7 @@ class SessionManager(
     private val tabStates = LinkedHashMap<String, TabState>()
     private val sessions = LinkedHashMap<String, RepoSession>()
     private val closingTabs = LinkedHashSet<String>()
+    private val pendingOpenPaths = LinkedHashSet<Path>()
 
     private val _tabs = MutableStateFlow<List<TabState>>(emptyList())
     val tabs: StateFlow<List<TabState>> = _tabs.asStateFlow()
@@ -55,22 +56,26 @@ class SessionManager(
     fun openRepo(path: Path) {
         if (closed) return
         val normalized = path.toAbsolutePath().normalize()
-        val existing = synchronized(lock) {
-            tabStates.values.firstOrNull { normalizePath(it.path) == normalized }
+        val plan = synchronized(lock) {
+            if (closed) return
+            if (tabStates.values.any { it.id in closingTabs && normalizePath(it.path) == normalized }) {
+                pendingOpenPaths.add(normalized)
+                return
+            }
+            val existing = tabStates.values.firstOrNull {
+                it.id !in closingTabs && normalizePath(it.path) == normalized
+            }
+            if (existing != null) {
+                OpenPlan(existing.id, created = false)
+            } else {
+                val id = UUID.randomUUID().toString()
+                tabStates[id] = TabState(id = id, path = normalized.toString())
+                _tabs.value = tabStates.values.toList()
+                OpenPlan(id, created = true)
+            }
         }
-        if (existing != null) {
-            activate(existing.id)
-            return
-        }
-
-        val id = UUID.randomUUID().toString()
-        val tab = TabState(id = id, path = normalized.toString())
-        synchronized(lock) {
-            tabStates[id] = tab
-            _tabs.value = tabStates.values.toList()
-        }
-        persist()
-        activate(id)
+        if (plan.created) persist()
+        activate(plan.tabId)
     }
 
     fun closeTab(id: String) {
@@ -130,6 +135,7 @@ class SessionManager(
         synchronized(lock) {
             sessions.clear()
             closingTabs.clear()
+            pendingOpenPaths.clear()
             tabStates.clear()
             _tabs.value = emptyList()
             _activeId.value = null
@@ -194,13 +200,20 @@ class SessionManager(
         closingSession?.discardSnapshot()
         closingSession?.close()
         persist()
+
+        val reopen = synchronized(lock) {
+            val path = normalizePath(plan.tab.path)
+            if (path != null && pendingOpenPaths.remove(path) && !closed) path else null
+        }
+        if (reopen != null) openRepo(reopen)
     }
 
     private fun neighborLocked(id: String): String? {
         val ids = tabStates.keys.toList()
         val index = ids.indexOf(id)
         if (index < 0) return null
-        return ids.getOrNull(index + 1) ?: ids.getOrNull(index - 1)
+        val candidates = ids.drop(index + 1) + ids.take(index).asReversed()
+        return candidates.firstOrNull { it !in closingTabs }
     }
 
     private fun restoreTabs() {
@@ -212,14 +225,34 @@ class SessionManager(
         }
         if (loaded == null) return
 
+        val idsByPath = HashMap<Path, String>()
         synchronized(lock) {
             loaded.tabs.forEach { tab ->
-                if (tab.id.isNotBlank()) tabStates.putIfAbsent(tab.id, tab)
+                if (tab.id.isBlank()) return@forEach
+                val path = normalizePath(tab.path)
+                if (path == null) {
+                    _persistenceError.value = "Could not restore tab ${tab.id}: invalid path."
+                    return@forEach
+                }
+                if (path in idsByPath) return@forEach
+                if (tabStates.putIfAbsent(tab.id, tab) == null) {
+                    idsByPath[path] = tab.id
+                }
             }
             _tabs.value = tabStates.values.toList()
         }
 
-        val active = loaded.activeId?.takeIf { id -> synchronized(lock) { id in tabStates } }
+        val requestedId = loaded.activeId?.takeIf { it.isNotBlank() }
+        val active = requestedId?.let { id ->
+            synchronized(lock) {
+                if (id in tabStates) {
+                    id
+                } else {
+                    val path = loaded.tabs.firstOrNull { it.id == id }?.let { normalizePath(it.path) }
+                    path?.let(idsByPath::get)
+                }
+            }
+        }
         if (active != null) activateInternal(active, persist = false)
     }
 
@@ -244,6 +277,8 @@ class SessionManager(
         val wasActive: Boolean,
         val neighborId: String?,
     )
+
+    private data class OpenPlan(val tabId: String, val created: Boolean)
 }
 
 private fun normalizePath(value: String): Path? = try {
