@@ -31,6 +31,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -376,8 +377,8 @@ private fun LaneCanvas(
             when (segment.kind) {
                 SegKind.PASS -> drawLine(
                     color = color,
-                    start = androidx.compose.ui.geometry.Offset(fromX, 0f),
-                    end = androidx.compose.ui.geometry.Offset(toX, size.height),
+                    start = Offset(fromX, 0f),
+                    end = Offset(toX, size.height),
                     strokeWidth = GraphStyle.STROKE_WIDTH.toPx(),
                 )
                 SegKind.IN -> {
@@ -403,8 +404,8 @@ private fun LaneCanvas(
                     if (segment.merge) {
                         val tipY = if (GraphStyle.ARROW_TOWARD_PARENT) size.height else halfHeight
                         val baseY = if (GraphStyle.ARROW_TOWARD_PARENT) tipY - arrow else tipY + arrow
-                        drawLine(color, androidx.compose.ui.geometry.Offset(toX, tipY), androidx.compose.ui.geometry.Offset(toX - arrow, baseY), GraphStyle.STROKE_WIDTH.toPx())
-                        drawLine(color, androidx.compose.ui.geometry.Offset(toX, tipY), androidx.compose.ui.geometry.Offset(toX + arrow, baseY), GraphStyle.STROKE_WIDTH.toPx())
+                        drawLine(color, Offset(toX, tipY), Offset(toX - arrow, baseY), GraphStyle.STROKE_WIDTH.toPx())
+                        drawLine(color, Offset(toX, tipY), Offset(toX + arrow, baseY), GraphStyle.STROKE_WIDTH.toPx())
                     }
                 }
             }
@@ -417,16 +418,16 @@ private fun LaneCanvas(
             drawCircle(
                 color = colors.headHalo,
                 radius = radius * GraphStyle.HEAD_HALO_RADIUS_FACTOR,
-                center = androidx.compose.ui.geometry.Offset(nodeX, nodeY),
+                center = Offset(nodeX, nodeY),
                 style = haloStroke,
             )
         }
-        drawCircle(color = nodeColor, radius = radius, center = androidx.compose.ui.geometry.Offset(nodeX, nodeY))
+        drawCircle(color = nodeColor, radius = radius, center = Offset(nodeX, nodeY))
         if (merge) {
             drawCircle(
                 color = colors.nodeBorder,
                 radius = radius * GraphStyle.MERGE_RING_RADIUS_FACTOR,
-                center = androidx.compose.ui.geometry.Offset(nodeX, nodeY),
+                center = Offset(nodeX, nodeY),
                 style = nodeBorderStroke,
             )
         }

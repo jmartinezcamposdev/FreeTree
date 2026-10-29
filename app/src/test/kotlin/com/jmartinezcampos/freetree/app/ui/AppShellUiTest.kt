@@ -83,6 +83,23 @@ class AppShellUiTest {
     }
 
     @Test
+    fun newTabButtonInvokesTheOpenRepositoryAction() = runDesktopComposeUiTest(width = 1200, height = 800) {
+        val fixture = fixture()
+        var opened = 0
+        try {
+            setContent { App(fixture.manager, onOpenRepository = { opened++ }) }
+            waitUntil(timeoutMillis = 5_000) {
+                fixture.manager.activeSession.value?.state?.value?.graph != null
+            }
+            onNodeWithTag(UiTestTags.NEW_TAB).performClick()
+            waitForIdle()
+            assertEquals(1, opened)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun queryAppliesOnEnterAndTabsActivateAndClose() = runDesktopComposeUiTest(width = 1400, height = 900) {
         val fixture = fixture()
         try {
