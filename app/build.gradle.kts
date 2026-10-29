@@ -22,6 +22,10 @@ dependencies {
 
     testImplementation(libs.kotlin.test)
     testImplementation(libs.kotlin.testJunit)
+    testImplementation(libs.kotlinx.coroutinesTest)
+    testImplementation(testFixtures(project(":core")))
+    testImplementation(libs.compose.uiTest)
+    testImplementation(libs.compose.uiTestJunit4)
 }
 
 compose.desktop {
