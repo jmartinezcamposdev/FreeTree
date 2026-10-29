@@ -45,9 +45,12 @@ internal fun ChangesPanel(
     val status = state.status
     val entries = status?.entries.orEmpty()
     val conflicts = entries.filter { it.kind == StatusKind.UNMERGED }
-    val staged = entries.filter { it.kind != StatusKind.UNMERGED && it.index != ' ' && it.index != '?' }
+    val staged = entries.filter {
+        it.kind != StatusKind.UNMERGED && it.index != '?' && !isStatusBlank(it.index)
+    }
     val unstaged = entries.filter {
-        it.kind != StatusKind.UNMERGED && (it.kind == StatusKind.UNTRACKED || it.worktree != ' ')
+        it.kind != StatusKind.UNMERGED &&
+            (it.kind == StatusKind.UNTRACKED || !isStatusBlank(it.worktree))
     }
     var message by remember(session?.id) { mutableStateOf("") }
     var pendingDiscard by remember { mutableStateOf<StatusEntry?>(null) }

@@ -21,6 +21,8 @@ fun tabTitle(pathText: String): String = try {
     pathText
 }
 
+fun isStatusBlank(status: Char): Boolean = status == ' ' || status == '.'
+
 fun statusLabel(status: Char): String = when (status) {
     'A' -> "A"
     'M' -> "M"
@@ -29,6 +31,7 @@ fun statusLabel(status: Char): String = when (status) {
     'C' -> "C"
     'U' -> "U"
     '?' -> "U"
+    ' ', '.' -> ""
     else -> "M"
 }
 
@@ -36,6 +39,7 @@ fun statusColor(status: Char, colors: GraphColors) = when (status) {
     'A', '?' -> colors.statusAdded
     'D' -> colors.statusDeleted
     'R', 'C' -> colors.statusRenamed
+    ' ', '.' -> colors.onSurfaceMuted
     else -> colors.statusModified
 }
 
