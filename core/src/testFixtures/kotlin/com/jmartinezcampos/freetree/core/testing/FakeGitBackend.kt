@@ -12,6 +12,8 @@ import com.jmartinezcampos.freetree.core.model.GitResult
 import com.jmartinezcampos.freetree.core.model.HeadInfo
 import com.jmartinezcampos.freetree.core.model.LogSpec
 import com.jmartinezcampos.freetree.core.model.RawCommit
+import com.jmartinezcampos.freetree.core.model.StatusEntry
+import com.jmartinezcampos.freetree.core.model.StatusKind
 import com.jmartinezcampos.freetree.core.model.WorkingStatus
 import java.nio.file.Path
 import java.util.ArrayDeque
@@ -75,8 +77,12 @@ class SuspensionGate internal constructor() {
 
 /**
  * In-memory [GitBackend] for session tests. All state is replaceable snapshots; the call log and
- * concurrency counters are guarded by a private lock. Write methods return configured results and do
- * not mutate snapshots; [logStream] emits [commits] in order and records the received [LogSpec].
+ * concurrency counters are guarded by a private lock. Write methods return configured results and,
+ * unless [statefulWrites] is enabled, do not mutate snapshots. [logStream] emits [commits] in order
+ * and records the received [LogSpec].
+ *
+ * With [statefulWrites] the fake applies stage/unstage/discard/commit to [status] (and commit to
+ * [commits], [refs] and [head]) so UI and acceptance tests can observe the sections change.
  */
 class FakeGitBackend(
     commits: List<RawCommit> = emptyList(),
@@ -87,6 +93,7 @@ class FakeGitBackend(
     commitDetails: Map<String, CommitDetail> = emptyMap(),
     changedFiles: Map<String, List<FileChange>> = emptyMap(),
     diffs: Map<DiffTarget, DiffText> = emptyMap(),
+    private val statefulWrites: Boolean = false,
 ) : GitBackend {
 
     private val lock = Any()
@@ -101,6 +108,7 @@ class FakeGitBackend(
     private var peakCalls = 0
     private var activeWrites = 0
     private var peakWrites = 0
+    private var committedWrites = 0
 
     @Volatile
     var commits: List<RawCommit> = commits.toList()
@@ -246,19 +254,39 @@ class FakeGitBackend(
     override suspend fun status(): WorkingStatus = call(FakeMethod.STATUS) { status }
 
     override suspend fun stage(paths: List<String>): GitResult =
-        call(FakeMethod.STAGE, paths = paths.toList()) { resultFor(FakeMethod.STAGE) }
+        call(FakeMethod.STAGE, paths = paths.toList()) {
+            resultFor(FakeMethod.STAGE).also { result ->
+                if (statefulWrites && result is GitResult.Ok) applyStage(paths)
+            }
+        }
 
     override suspend fun unstage(paths: List<String>): GitResult =
-        call(FakeMethod.UNSTAGE, paths = paths.toList()) { resultFor(FakeMethod.UNSTAGE) }
+        call(FakeMethod.UNSTAGE, paths = paths.toList()) {
+            resultFor(FakeMethod.UNSTAGE).also { result ->
+                if (statefulWrites && result is GitResult.Ok) applyUnstage(paths)
+            }
+        }
 
     override suspend fun discardStaged(paths: List<String>): GitResult =
-        call(FakeMethod.DISCARD_STAGED, paths = paths.toList()) { resultFor(FakeMethod.DISCARD_STAGED) }
+        call(FakeMethod.DISCARD_STAGED, paths = paths.toList()) {
+            resultFor(FakeMethod.DISCARD_STAGED).also { result ->
+                if (statefulWrites && result is GitResult.Ok) applyDiscardStaged(paths)
+            }
+        }
 
     override suspend fun discardUnstaged(paths: List<String>): GitResult =
-        call(FakeMethod.DISCARD_UNSTAGED, paths = paths.toList()) { resultFor(FakeMethod.DISCARD_UNSTAGED) }
+        call(FakeMethod.DISCARD_UNSTAGED, paths = paths.toList()) {
+            resultFor(FakeMethod.DISCARD_UNSTAGED).also { result ->
+                if (statefulWrites && result is GitResult.Ok) applyDiscardUnstaged(paths)
+            }
+        }
 
     override suspend fun commit(message: String): GitResult =
-        call(FakeMethod.COMMIT, message = message) { resultFor(FakeMethod.COMMIT) }
+        call(FakeMethod.COMMIT, message = message) {
+            resultFor(FakeMethod.COMMIT).also { result ->
+                if (statefulWrites && result is GitResult.Ok) applyCommit(message)
+            }
+        }
 
     override suspend fun push(): GitResult = call(FakeMethod.PUSH) { resultFor(FakeMethod.PUSH) }
 
@@ -339,6 +367,133 @@ class FakeGitBackend(
 
     private fun resultFor(method: FakeMethod): GitResult =
         synchronized(lock) { results[method] ?: GitResult.Ok("") }
+
+    private fun applyStage(paths: List<String>) = mutateStatus { entries ->
+        paths.toSet().forEach { path ->
+            val index = entries.indexOfFirst { it.path == path }
+            if (index < 0) return@forEach
+            val entry = entries[index]
+            entries[index] = when {
+                entry.kind == StatusKind.UNTRACKED || entry.index == '?' ->
+                    entry.copy(index = 'A', worktree = ' ', kind = StatusKind.ORDINARY)
+                entry.index == 'A' && entry.worktree != ' ' ->
+                    entry.copy(worktree = ' ', kind = StatusKind.ORDINARY)
+                entry.worktree != ' ' ->
+                    entry.copy(index = entry.worktree, worktree = ' ', kind = StatusKind.ORDINARY)
+                else -> entry
+            }
+        }
+    }
+
+    private fun applyUnstage(paths: List<String>) = mutateStatus { entries ->
+        paths.toSet().forEach { path ->
+            val index = entries.indexOfFirst { it.path == path }
+            if (index < 0) return@forEach
+            val entry = entries[index]
+            if (entry.index == ' ' || entry.index == '?') return@forEach
+            entries[index] = if (entry.index == 'A' && entry.worktree == ' ') {
+                entry.copy(index = '?', worktree = '?', kind = StatusKind.UNTRACKED)
+            } else {
+                entry.copy(
+                    index = ' ',
+                    worktree = entry.worktree.takeIf { it != ' ' } ?: entry.index,
+                    kind = StatusKind.ORDINARY,
+                )
+            }
+        }
+    }
+
+    private fun applyDiscardStaged(paths: List<String>) = mutateStatus { entries ->
+        paths.toSet().forEach { path ->
+            val index = entries.indexOfFirst { it.path == path }
+            if (index < 0) return@forEach
+            val entry = entries[index]
+            when {
+                entry.index == ' ' || entry.index == '?' -> Unit
+                entry.index == 'A' ->
+                    entries[index] = entry.copy(index = '?', worktree = '?', kind = StatusKind.UNTRACKED)
+                entry.index == 'D' ->
+                    entries[index] = entry.copy(index = ' ', worktree = 'D', kind = StatusKind.ORDINARY)
+                entry.worktree == ' ' ->
+                    entries.removeAt(index)
+                else ->
+                    entries[index] = entry.copy(index = ' ', kind = StatusKind.ORDINARY)
+            }
+        }
+    }
+
+    private fun applyDiscardUnstaged(paths: List<String>) = mutateStatus { entries ->
+        paths.toSet().forEach { path ->
+            val index = entries.indexOfFirst { it.path == path }
+            if (index < 0) return@forEach
+            val entry = entries[index]
+            when {
+                entry.kind == StatusKind.UNTRACKED || entry.index == '?' -> entries.removeAt(index)
+                entry.index == ' ' -> entries.removeAt(index)
+                else -> entries[index] = entry.copy(worktree = ' ', kind = StatusKind.ORDINARY)
+            }
+        }
+    }
+
+    private fun applyCommit(message: String) = synchronized(lock) {
+        val staged = status.entries.filter { it.index != ' ' && it.index != '?' && it.index != 'U' }
+        if (staged.isEmpty()) return@synchronized
+        val parent = head.commit
+        val nextHash = (++committedWrites).toString(16).padStart(40, '0')
+        val now = (commits.firstOrNull()?.authorTimeSec ?: 0L) + 60L
+        val commit = RawCommit(
+            hash = nextHash,
+            parents = listOfNotNull(parent),
+            authorName = "Fake Analyst",
+            authorTimeSec = now,
+            subject = message.lineSequence().firstOrNull().orEmpty(),
+        )
+        val changed = staged.map { entry ->
+            FileChange(
+                status = when (entry.index) {
+                    'A', '?' -> 'A'
+                    'D' -> 'D'
+                    'R' -> 'R'
+                    else -> 'M'
+                },
+                path = entry.path,
+                oldPath = entry.origPath,
+            )
+        }
+        commits = listOf(commit) + commits
+        commitDetails = commitDetails + (nextHash to commit.toDetail().copy(message = message))
+        changedFiles = changedFiles + (nextHash to changed)
+        head = HeadInfo(nextHash, head.branchShortName)
+        val branchName = head.branchShortName
+        if (branchName != null) {
+            refs = refs.map { ref ->
+                if (ref.fullName == "refs/heads/$branchName") ref.copy(commit = nextHash) else ref
+            }
+        }
+        val remaining = status.entries.mapNotNull { entry ->
+            if (entry.index == ' ' || entry.index == '?' || entry.index == 'U') {
+                entry
+            } else if (entry.worktree != ' ') {
+                entry.copy(index = ' ', kind = StatusKind.ORDINARY)
+            } else {
+                null
+            }
+        }
+        status = status.copy(
+            branchHead = nextHash,
+            ahead = status.ahead + 1,
+            unborn = false,
+            entries = remaining,
+        )
+    }
+
+    private fun mutateStatus(block: (MutableList<StatusEntry>) -> Unit) {
+        synchronized(lock) {
+            val entries = status.entries.toMutableList()
+            block(entries)
+            status = status.copy(entries = entries.toList())
+        }
+    }
 
     private fun RawCommit.toDetail() = CommitDetail(
         hash = hash,
