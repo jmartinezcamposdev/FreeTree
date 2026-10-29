@@ -19,6 +19,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 internal enum class GitCommandType { READ, LOCAL_WRITE, NETWORK }
 
@@ -87,6 +88,9 @@ internal class GitRunner(
             "core.quotepath=off",
         ) + args
         val builder = ProcessBuilder(command).directory(workTree.toFile())
+        builder.environment().apply {
+            REPOSITORY_ENVIRONMENT_VARIABLES.forEach { remove(it) }
+        }
         baseEnvironment.forEach { (key, value) -> builder.environment()[key] = value }
         builder.environment().apply {
             putAll(environment)
@@ -130,18 +134,16 @@ internal class GitRunner(
         }
 
         try {
-            var stdinFailure: IOException? = null
-            try {
-                process.outputStream.use { output ->
-                    if (stdin != null) output.write(stdin)
-                }
-            } catch (e: IOException) {
-                if (!isActive) throw CancellationException("Git command cancelled", e)
-                stdinFailure = e
-            }
-
             val stderrDeferred = async(Dispatchers.IO) {
                 process.errorStream.readBytes()
+            }
+            val stdinDeferred = if (stdin == null) {
+                process.outputStream.closeQuietly()
+                null
+            } else {
+                async(Dispatchers.IO) {
+                    process.outputStream.use { output -> output.write(stdin) }
+                }
             }
 
             val collected = if (onRecord == null) ByteArrayOutputStream() else null
@@ -165,27 +167,56 @@ internal class GitRunner(
             }
             watchdog.cancel()
 
-            val exitCode = if (timedOut.get()) -1 else {
-                process.waitFor(5, TimeUnit.SECONDS)
-                if (process.isAlive) {
-                    terminate(process)
-                    process.waitFor()
+            var stdinFailure: IOException? = null
+            var stdinTimedOut = false
+            if (stdinDeferred != null) {
+                try {
+                    val written = withTimeoutOrNull(STDIN_WRITE_MILLIS) {
+                        stdinDeferred.await()
+                        true
+                    }
+                    if (written == null) {
+                        stdinTimedOut = true
+                        stdinFailure = IOException("write timed out")
+                        terminate(process)
+                    }
+                } catch (e: IOException) {
+                    if (!isActive) throw CancellationException("Git command cancelled", e)
+                    stdinFailure = e
                 }
-                process.exitValue()
             }
+
+            var exitCode = resolveExitCode(process, timedOut.get())
 
             currentCoroutineContext().ensureActive()
 
-            val rawStderr = stderrDeferred.await().toString(StandardCharsets.UTF_8)
+            val stderrBytes = try {
+                withTimeoutOrNull(STDERR_DRAIN_MILLIS) { stderrDeferred.await() }
+            } catch (e: IOException) {
+                if (!isActive) throw CancellationException("Git command cancelled", e)
+                null
+            }
+            if (stderrBytes == null) {
+                terminate(process)
+                stderrDeferred.cancel()
+            }
+
+            val rawStderr = stderrBytes?.toString(StandardCharsets.UTF_8).orEmpty()
             val stderr = when {
                 timedOut.get() -> withNote(rawStderr, "Git command timed out after $timeoutMillis ms.")
+                stderrBytes == null -> withNote(rawStderr, "Could not read Git stderr.")
                 stdoutFailure != null -> withNote(rawStderr, "Could not read Git output: ${stdoutFailure.message}")
-                stdinFailure != null && exitCode == 0 ->
+                stdinFailure != null && (exitCode == 0 || stdinTimedOut) ->
                     withNote(rawStderr, "Could not write Git input: ${stdinFailure.message}")
+                exitCode == -1 -> withNote(rawStderr, "Git command did not exit after termination.")
                 else -> rawStderr
             }
+            val failedStreams = stdoutFailure != null || stdinFailure != null || stderrBytes == null
+            if (failedStreams && exitCode == 0 && !timedOut.get() && !truncated.get()) {
+                exitCode = -1
+            }
             GitProcessResult(
-                exitCode = if ((stdoutFailure != null || stdinFailure != null) && exitCode == 0) -1 else exitCode,
+                exitCode = exitCode,
                 stdout = collected?.toByteArray() ?: ByteArray(0),
                 stderr = stderr,
                 truncated = truncated.get(),
@@ -245,9 +276,18 @@ internal class GitRunner(
         }
     }
 
+    private fun resolveExitCode(process: Process, timedOut: Boolean): Int {
+        if (timedOut) return -1
+        if (process.waitFor(EXIT_WAIT_MILLIS, TimeUnit.MILLISECONDS)) return process.exitValue()
+        terminate(process)
+        return if (process.waitFor(EXIT_WAIT_MILLIS, TimeUnit.MILLISECONDS)) process.exitValue() else -1
+    }
+
     private fun terminate(process: Process) {
-        process.toHandle().descendants().forEach { handle ->
-            if (handle.isAlive) handle.destroyForcibly()
+        process.toHandle().descendants().use { descendants ->
+            descendants.forEach { handle ->
+                if (handle.isAlive) handle.destroyForcibly()
+            }
         }
         process.destroyForcibly()
         process.outputStream.closeQuietly()
@@ -259,6 +299,25 @@ internal class GitRunner(
         stderr.isBlank() -> note
         stderr.endsWith("\n") -> stderr + note
         else -> stderr + "\n" + note
+    }
+
+    private companion object {
+        const val STDIN_WRITE_MILLIS = 10_000L
+        const val STDERR_DRAIN_MILLIS = 5_000L
+        const val EXIT_WAIT_MILLIS = 5_000L
+
+        // A parent process may export these; the repository is selected by the working directory.
+        val REPOSITORY_ENVIRONMENT_VARIABLES = listOf(
+            "GIT_DIR",
+            "GIT_WORK_TREE",
+            "GIT_COMMON_DIR",
+            "GIT_INDEX_FILE",
+            "GIT_OBJECT_DIRECTORY",
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+            "GIT_NAMESPACE",
+            "GIT_CEILING_DIRECTORIES",
+            "GIT_OPTIONAL_LOCKS",
+        )
     }
 }
 

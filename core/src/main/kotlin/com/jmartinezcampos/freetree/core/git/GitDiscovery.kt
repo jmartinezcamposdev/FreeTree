@@ -105,7 +105,8 @@ object GitDiscovery {
                 process.destroyForcibly()
                 null
             } else {
-                parseVersion(process.inputStream.readBytes().toString(StandardCharsets.UTF_8))
+                val output = process.inputStream.use { it.readBytes() }
+                parseVersion(output.toString(StandardCharsets.UTF_8))
             }
         } finally {
             if (process.isAlive) process.destroyForcibly()
