@@ -142,6 +142,48 @@ class ChangesPanelUiTest {
         }
 
     @Test
+    fun porcelainDotStatusesDoNotMoveFilesIntoTheWrongSection() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val fixture = fixture(
+                WorkingStatus(
+                    commits[1].hash,
+                    null,
+                    0,
+                    0,
+                    false,
+                    listOf(
+                        StatusEntry("src/Staged.kt", null, 'A', '.', StatusKind.ORDINARY),
+                        StatusEntry("README.md", null, '.', 'M', StatusKind.ORDINARY),
+                        StatusEntry("src/App.kt", null, 'M', 'M', StatusKind.ORDINARY),
+                    ),
+                ),
+            )
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.status != null
+                }
+
+                onNodeWithTag(UiTestTags.stagedFile("src/Staged.kt")).assertExists()
+                onNodeWithTag(UiTestTags.unstagedFile("src/Staged.kt")).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.stagedFile("README.md")).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.unstagedFile("README.md")).assertExists()
+                onNodeWithTag(UiTestTags.stagedFile("src/App.kt")).assertExists()
+                onNodeWithTag(UiTestTags.unstagedFile("src/App.kt")).assertExists()
+
+                onNodeWithTag(UiTestTags.COMMIT_MESSAGE).performTextInput("Commit staged")
+                waitForIdle()
+                onNodeWithTag(UiTestTags.COMMIT_BUTTON).assertIsEnabled()
+                onNodeWithTag(UiTestTags.COMMIT_BUTTON).performClick()
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.backend.callCount(FakeMethod.COMMIT) == 1
+                }
+            } finally {
+                fixture.close()
+            }
+        }
+
+    @Test
     fun commitIsDisabledWithoutMessageAndEnabledWithMessageAndStagedFiles() =
         runDesktopComposeUiTest(width = 1400, height = 900) {
             val fixture = fixture(

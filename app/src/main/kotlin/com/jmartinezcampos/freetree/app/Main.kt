@@ -7,21 +7,20 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
-import com.jmartinezcampos.freetree.core.session.InMemorySessionPersistence
 import com.jmartinezcampos.freetree.core.session.SessionManager
+import java.nio.file.InvalidPathException
+import java.nio.file.Path
 import javax.swing.JFileChooser
 
-fun main() = application {
+fun main(args: Array<String>) = application {
+    val startupRepository = startupRepository(args)
     val manager = remember {
-        SessionManager(
-            backendFactory = { path -> DemoGitBackend(path) },
-            watcherFactory = { DemoWatcher() },
-            persistence = InMemorySessionPersistence(),
-            restore = false,
-        )
+        SessionManager(restore = startupRepository == null)
     }
 
-    LaunchedEffect(Unit) { manager.openRepo(DemoRepository.path) }
+    LaunchedEffect(startupRepository) {
+        startupRepository?.let(manager::openRepo)
+    }
     DisposableEffect(Unit) { onDispose { manager.close() } }
 
     Window(
@@ -39,9 +38,21 @@ fun main() = application {
     }
 }
 
+private fun startupRepository(args: Array<String>): Path? {
+    val value = args.firstOrNull { it.isNotBlank() } ?: return null
+    return try {
+        Path.of(value).toAbsolutePath().normalize()
+    } catch (e: InvalidPathException) {
+        System.err.println("FreeTree: invalid repository path '$value': ${e.message}")
+        null
+    }
+}
+
 private fun chooseRepository(manager: SessionManager) {
-    val chooser = JFileChooser()
-    chooser.fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+    val chooser = JFileChooser().apply {
+        dialogTitle = "Open Git repository"
+        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+    }
     if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
         chooser.selectedFile?.toPath()?.let(manager::openRepo)
     }
