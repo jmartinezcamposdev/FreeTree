@@ -55,7 +55,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 fun App(
     sessionManager: SessionManager,
     onOpenRepository: (() -> Unit)? = null,
-    loadFullDiff: (RepoSession, DiffTarget) -> Unit = { session, target -> session.openDiff(target) },
+    loadFullDiff: (RepoSession, DiffTarget) -> Unit = { session, target ->
+        session.openDiff(target, unlimited = true)
+    },
 ) {
     val dark = isSystemInDarkTheme()
     val colors = GraphStyle.colors(dark)
