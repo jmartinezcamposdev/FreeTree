@@ -37,7 +37,7 @@ class DiscardAcceptanceTest {
         assertEquals("two\n", repo.readFile("a.txt"))
         assertTrue(repo.indexMatchesHead())
         val entry = assertStatusMatches(repo, backend).entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('M', entry.worktree)
     }
 
@@ -86,7 +86,7 @@ class DiscardAcceptanceTest {
         assertEquals("two\n", repo.git("show", ":a.txt").requireSuccess().stdout)
         val entry = assertStatusMatches(repo, backend).entries.single { it.path == "a.txt" }
         assertEquals('M', entry.index)
-        assertEquals('.', entry.worktree)
+        assertEquals(' ', entry.worktree)
     }
 
     @Test
@@ -118,7 +118,7 @@ class DiscardAcceptanceTest {
         assertEquals("one\n", repo.git("show", ":a.txt").requireSuccess().stdout)
         assertTrue(repo.indexMatchesHead())
         val entry = assertStatusMatches(repo, backend).entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('M', entry.worktree)
     }
 
@@ -135,7 +135,7 @@ class DiscardAcceptanceTest {
         assertEquals("two\n", repo.git("show", ":a.txt").requireSuccess().stdout)
         val entry = assertStatusMatches(repo, backend).entries.single { it.path == "a.txt" }
         assertEquals('M', entry.index)
-        assertEquals('.', entry.worktree)
+        assertEquals(' ', entry.worktree)
     }
 
     @Test
@@ -150,7 +150,7 @@ class DiscardAcceptanceTest {
         assertFalse(repo.exists("a.txt"))
         assertTrue(repo.indexMatchesHead())
         val entry = assertStatusMatches(repo, backend).entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('D', entry.worktree)
     }
 
@@ -165,7 +165,10 @@ class DiscardAcceptanceTest {
         assertFailure(staged)
         assertFailure(unstaged)
         assertEquals(before, repo.statusV1())
-        assertEquals(StatusKind.UNMERGED, backend.status().entries.single { it.path == "conflict.txt" }.kind)
+        val entry = assertStatusMatches(repo, backend).entries.single { it.path == "conflict.txt" }
+        assertEquals(StatusKind.UNMERGED, entry.kind)
+        assertEquals('U', entry.index)
+        assertEquals('U', entry.worktree)
     }
 
     private fun createConflict() {
