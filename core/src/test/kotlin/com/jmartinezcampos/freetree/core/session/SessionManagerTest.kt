@@ -157,6 +157,7 @@ class SessionManagerTest {
 
         firstSession.applyQuery("author:Ada")
         firstSession.setHiddenRefs(setOf("refs/heads/main"))
+        firstSession.setShowTags(false)
         firstSession.selectCommit(firstCommit)
         firstSession.setScrollAnchor(firstCommit, 4)
         advanceUntilIdle()
@@ -176,6 +177,7 @@ class SessionManagerTest {
 
         assertEquals("author:Ada", firstSession.tab.value.query)
         assertEquals(setOf("refs/heads/main"), firstSession.tab.value.hiddenRefs)
+        assertFalse(firstSession.tab.value.showTags)
         assertEquals(Selection.Commit(firstCommit), firstSession.state.value.selection)
         assertEquals(firstCommit, firstSession.tab.value.selectedHash)
         assertEquals(firstCommit, firstSession.tab.value.scrollAnchorHash)
@@ -252,6 +254,263 @@ class SessionManagerTest {
         assertSame(session, manager.activeSession.value)
         assertEquals(1, watchers.size)
         assertEquals(1, watcher.startCount)
+        manager.close()
+    }
+
+    @Test
+    fun closingLastTabActivatesPreviousTab() = runTest {
+        val commits = RandomDag.generate(seed = 12, commitCount = 20)
+        val first = backend(commits, commits.first().hash)
+        val second = backend(commits, commits.first().hash)
+        val manager = manager(mapOf(firstPath.toString() to first, secondPath.toString() to second))
+
+        manager.openRepo(firstPath)
+        advanceUntilIdle()
+        val firstId = manager.activeId.value!!
+        manager.openRepo(secondPath)
+        advanceUntilIdle()
+        val secondId = manager.activeId.value!!
+
+        manager.closeTab(secondId)
+        advanceUntilIdle()
+
+        assertEquals(listOf(firstId), manager.tabs.value.map { it.id })
+        assertEquals(firstId, manager.activeId.value)
+        assertSame(manager.session(firstId), manager.activeSession.value)
+        assertEquals(SessionPhase.ACTIVE, manager.session(firstId)!!.phase.value)
+        assertNull(manager.session(secondId))
+        manager.close()
+    }
+
+    @Test
+    fun closingOnlyTabClearsActiveSession() = runTest {
+        val commits = RandomDag.generate(seed = 13, commitCount = 20)
+        val first = backend(commits, commits.first().hash)
+        val manager = manager(mapOf(firstPath.toString() to first))
+
+        manager.openRepo(firstPath)
+        advanceUntilIdle()
+        val firstId = manager.activeId.value!!
+
+        manager.closeTab(firstId)
+        advanceUntilIdle()
+
+        assertTrue(manager.tabs.value.isEmpty())
+        assertNull(manager.activeId.value)
+        assertNull(manager.activeSession.value)
+        assertNull(manager.session(firstId))
+        manager.close()
+    }
+
+    @Test
+    fun closingInactiveTabKeepsActiveSession() = runTest {
+        val commits = RandomDag.generate(seed = 14, commitCount = 20)
+        val first = backend(commits, commits.first().hash)
+        val second = backend(commits, commits.first().hash)
+        val manager = manager(mapOf(firstPath.toString() to first, secondPath.toString() to second))
+
+        manager.openRepo(firstPath)
+        advanceUntilIdle()
+        val firstId = manager.activeId.value!!
+        manager.openRepo(secondPath)
+        advanceUntilIdle()
+        val secondId = manager.activeId.value!!
+        val activeSession = manager.activeSession.value
+
+        manager.closeTab(firstId)
+        advanceUntilIdle()
+
+        assertEquals(listOf(secondId), manager.tabs.value.map { it.id })
+        assertEquals(secondId, manager.activeId.value)
+        assertSame(activeSession, manager.activeSession.value)
+        assertNull(manager.session(firstId))
+        manager.close()
+    }
+
+    @Test
+    fun closingActiveTabSkipsNeighborThatIsStillDraining() = runTest {
+        val commits = RandomDag.generate(seed = 18, commitCount = 20)
+        val first = backend(commits, commits.first().hash)
+        val second = backend(commits, commits.first().hash)
+        val third = backend(commits, commits.first().hash)
+        val manager = manager(
+            mapOf(
+                firstPath.toString() to first,
+                secondPath.toString() to second,
+                Path.of("/repo/three").toString() to third,
+            ),
+        )
+
+        manager.openRepo(firstPath)
+        advanceUntilIdle()
+        val firstId = manager.activeId.value!!
+        manager.openRepo(secondPath)
+        advanceUntilIdle()
+        val secondId = manager.activeId.value!!
+        manager.openRepo(Path.of("/repo/three"))
+        advanceUntilIdle()
+        val thirdId = manager.activeId.value!!
+        manager.activate(firstId)
+        advanceUntilIdle()
+
+        val secondSession = manager.session(secondId)!!
+        val gate = second.pause(FakeMethod.STAGE)
+        secondSession.stage(listOf("b.txt"))
+        advanceUntilIdle()
+        gate.awaitEntered()
+
+        manager.closeTab(secondId)
+        advanceUntilIdle()
+        assertTrue(manager.tabs.value.any { it.id == secondId })
+
+        manager.closeTab(firstId)
+        advanceUntilIdle()
+
+        assertEquals(thirdId, manager.activeId.value)
+        assertSame(manager.session(thirdId), manager.activeSession.value)
+
+        gate.release()
+        advanceUntilIdle()
+
+        assertEquals(listOf(thirdId), manager.tabs.value.map { it.id })
+        manager.close()
+    }
+
+    @Test
+    fun reopeningWhileTabDrainsDefersUntilCloseCompletes() = runTest {
+        val commits = RandomDag.generate(seed = 15, commitCount = 20)
+        val first = backend(commits, commits.first().hash)
+        val manager = manager(mapOf(firstPath.toString() to first))
+
+        manager.openRepo(firstPath)
+        advanceUntilIdle()
+        val firstId = manager.activeId.value!!
+        val firstSession = manager.session(firstId)!!
+        val gate = first.pause(FakeMethod.STAGE)
+
+        firstSession.stage(listOf("a.txt"))
+        advanceUntilIdle()
+        gate.awaitEntered()
+        manager.closeTab(firstId)
+        advanceUntilIdle()
+
+        assertEquals(listOf(firstId), manager.tabs.value.map { it.id })
+        assertNull(manager.activeId.value)
+
+        manager.openRepo(firstPath)
+        advanceUntilIdle()
+
+        assertEquals(listOf(firstId), manager.tabs.value.map { it.id })
+        assertNull(manager.activeId.value)
+
+        gate.release()
+        advanceUntilIdle()
+
+        val reopened = manager.tabs.value.single()
+        assertTrue(reopened.id != firstId)
+        assertEquals(firstPath.toString(), reopened.path)
+        assertEquals(reopened.id, manager.activeId.value)
+        assertEquals(reopened.id, manager.activeSession.value?.id)
+        assertNull(manager.session(firstId))
+        assertEquals(SessionPhase.ACTIVE, manager.activeSession.value?.phase?.value)
+        manager.close()
+    }
+
+    @Test
+    fun restoreDeduplicatesPathsAndActivatesRepresentative() = runTest {
+        val commits = RandomDag.generate(seed = 16, commitCount = 20)
+        val first = backend(commits, commits.first().hash)
+        val second = backend(commits, commits.first().hash)
+        val persistence = InMemorySessionPersistence(
+            PersistedSessionState(
+                tabs = listOf(
+                    TabState("a", firstPath.toString(), query = "author:Ada"),
+                    TabState("b", firstPath.resolve(".").toString(), query = "msg:other"),
+                    TabState("c", secondPath.toString()),
+                ),
+                activeId = "b",
+            ),
+        )
+        val manager = manager(
+            mapOf(firstPath.toString() to first, secondPath.toString() to second),
+            persistence = persistence,
+            restore = true,
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf("a", "c"), manager.tabs.value.map { it.id })
+        assertEquals("a", manager.activeId.value)
+        assertEquals("author:Ada", manager.session("a")!!.tab.value.query)
+        assertNull(manager.session("b"))
+        assertNull(manager.session("c"))
+        assertTrue(first.callsOf(FakeMethod.REFS).isNotEmpty())
+        assertTrue(second.calls.isEmpty())
+        manager.close()
+    }
+
+    @Test
+    fun restoreWithUnknownActiveIdKeepsNoActiveSession() = runTest {
+        val commits = RandomDag.generate(seed = 17, commitCount = 20)
+        val first = backend(commits, commits.first().hash)
+        val persistence = InMemorySessionPersistence(
+            PersistedSessionState(
+                tabs = listOf(TabState("a", firstPath.toString())),
+                activeId = "missing",
+            ),
+        )
+        val manager = manager(
+            mapOf(firstPath.toString() to first),
+            persistence = persistence,
+            restore = true,
+        )
+        advanceUntilIdle()
+
+        assertEquals(listOf("a"), manager.tabs.value.map { it.id })
+        assertNull(manager.activeId.value)
+        assertNull(manager.activeSession.value)
+        assertNull(manager.session("a"))
+        assertTrue(first.calls.isEmpty())
+        manager.close()
+    }
+
+    @Test
+    fun restoredUnavailableRepositoryReportsErrorAndStaysActive() = runTest {
+        val missingPath = Path.of("/repo/missing")
+        val persistence = InMemorySessionPersistence(
+            PersistedSessionState(
+                tabs = listOf(TabState("missing", missingPath.toString())),
+                activeId = "missing",
+            ),
+        )
+        val manager = manager(emptyMap(), persistence = persistence, restore = true)
+        advanceUntilIdle()
+
+        assertEquals(listOf("missing"), manager.tabs.value.map { it.id })
+        assertEquals("missing", manager.activeId.value)
+        val session = assertNotNull(manager.activeSession.value)
+        assertTrue(session.state.value.load is LoadState.Error)
+        assertTrue(session.state.value.message is UserMessage.Error)
+        manager.close()
+    }
+
+    @Test
+    fun restoreSkipsInvalidPathsAndReportsThem() = runTest {
+        val persistence = InMemorySessionPersistence(
+            PersistedSessionState(
+                tabs = listOf(
+                    TabState("bad", "\u0000invalid"),
+                    TabState("good", firstPath.toString()),
+                ),
+                activeId = "bad",
+            ),
+        )
+        val manager = manager(emptyMap(), persistence = persistence, restore = true)
+        advanceUntilIdle()
+
+        assertEquals(listOf("good"), manager.tabs.value.map { it.id })
+        assertNull(manager.activeId.value)
+        assertNull(manager.activeSession.value)
+        assertNotNull(manager.persistenceError.value)
         manager.close()
     }
 

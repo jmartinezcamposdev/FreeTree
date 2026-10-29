@@ -1,5 +1,8 @@
 package com.jmartinezcampos.freetree.core.session
 
+import com.jmartinezcampos.freetree.core.model.DiffTarget
+import com.jmartinezcampos.freetree.core.model.DiffText
+import com.jmartinezcampos.freetree.core.model.FileChange
 import com.jmartinezcampos.freetree.core.model.GitDirs
 import com.jmartinezcampos.freetree.core.model.GitRef
 import com.jmartinezcampos.freetree.core.model.GitResult
@@ -202,6 +205,257 @@ class RepoSessionTest {
     }
 
     @Test
+    fun keyboardNavigationDebouncesAndLoadsOnlyTheFinalCommit() = runTest {
+        val commits = RandomDag.generate(seed = 35, commitCount = 30)
+        val backend = backend(commits)
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        val first = session.state.value.graph!!.hash(3)
+        val second = session.state.value.graph!!.hash(8)
+        val changes = listOf(FileChange('M', "file.kt", null))
+        backend.changedFiles = mapOf(second to changes)
+        backend.clearCalls()
+
+        session.selectCommit(first)
+        advanceTimeBy(50)
+        runCurrent()
+        session.selectCommit(second)
+        advanceTimeBy(99)
+        runCurrent()
+
+        assertEquals(0, backend.callCount(FakeMethod.COMMIT_DETAIL))
+
+        advanceTimeBy(2)
+        runCurrent()
+
+        assertEquals(1, backend.callCount(FakeMethod.COMMIT_DETAIL))
+        assertEquals(second, backend.callsOf(FakeMethod.COMMIT_DETAIL).single().hash)
+        assertEquals(second, session.state.value.commitDetail?.hash)
+        assertEquals(changes, session.state.value.changedFiles)
+        assertEquals(second, session.tab.value.selectedHash)
+        session.close()
+    }
+
+    @Test
+    fun workingTreeSelectionLoadsNoCommitDetail() = runTest {
+        val commits = RandomDag.generate(seed = 36, commitCount = 20)
+        val backend = backend(commits)
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+
+        session.selectWorkingTree()
+        advanceUntilIdle()
+
+        assertEquals(Selection.WorkingTree, session.state.value.selection)
+        assertNull(session.state.value.commitDetail)
+        assertTrue(session.state.value.changedFiles.isEmpty())
+        assertEquals(SessionPhase.ACTIVE, session.phase.value)
+        assertEquals(0, backend.callCount(FakeMethod.COMMIT_DETAIL))
+        assertEquals(0, backend.callCount(FakeMethod.CHANGED_FILES))
+        assertNull(session.tab.value.selectedHash)
+        session.close()
+    }
+
+    @Test
+    fun openDiffLoadsUnlimitedAndDropsStaleResults() = runTest {
+        val commits = RandomDag.generate(seed = 37, commitCount = 10)
+        val truncated = DiffTarget.Unstaged("a.txt")
+        val other = DiffTarget.Staged("b.txt")
+        val backend = backend(commits)
+        backend.diffs = mapOf(
+            truncated to DiffText(emptyList(), binary = false, truncated = true),
+            other to DiffText(emptyList(), binary = false, truncated = false),
+        )
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+
+        session.openDiff(truncated)
+        advanceUntilIdle()
+
+        assertEquals(truncated, session.state.value.openDiffTarget)
+        assertTrue(session.state.value.openDiff!!.truncated)
+        assertEquals(false, backend.callsOf(FakeMethod.DIFF).single().unlimited)
+
+        backend.diffs = backend.diffs + (truncated to DiffText(emptyList(), binary = false, truncated = false))
+        session.openDiff(truncated, unlimited = true)
+        advanceUntilIdle()
+
+        assertTrue(backend.callsOf(FakeMethod.DIFF).last().unlimited)
+        assertFalse(session.state.value.openDiff!!.truncated)
+
+        val gate = backend.pauseNext(FakeMethod.DIFF)
+        session.openDiff(truncated)
+        advanceUntilIdle()
+        gate.awaitEntered()
+
+        session.openDiff(other, unlimited = true)
+        advanceUntilIdle()
+        assertEquals(other, session.state.value.openDiffTarget)
+
+        gate.release()
+        advanceUntilIdle()
+
+        assertEquals(other, session.state.value.openDiffTarget)
+        assertEquals(truncated, backend.callsOf(FakeMethod.DIFF)[1].target)
+        session.close()
+    }
+
+    @Test
+    fun interruptedDiffReloadsAfterReactivation() = runTest {
+        val commits = RandomDag.generate(seed = 42, commitCount = 10)
+        val target = DiffTarget.Unstaged("a.txt")
+        val backend = backend(commits)
+        backend.diffs = mapOf(target to DiffText(emptyList(), binary = false, truncated = false))
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+
+        val gate = backend.pauseNext(FakeMethod.DIFF)
+        session.openDiff(target, unlimited = true)
+        advanceUntilIdle()
+        gate.awaitEntered()
+
+        session.deactivate()
+        gate.release()
+        advanceUntilIdle()
+        assertNull(session.state.value.openDiff)
+
+        session.activate()
+        advanceUntilIdle()
+
+        assertNotNull(session.state.value.openDiff)
+        assertEquals(target, session.state.value.openDiffTarget)
+        assertEquals(2, backend.callCount(FakeMethod.DIFF))
+        assertTrue(backend.callsOf(FakeMethod.DIFF).last().unlimited)
+        session.close()
+    }
+
+    @Test
+    fun selectionCancelsPendingDiff() = runTest {
+        val commits = RandomDag.generate(seed = 38, commitCount = 20)
+        val backend = backend(commits)
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        val gate = backend.pauseNext(FakeMethod.DIFF)
+
+        session.openDiff(DiffTarget.Unstaged("a.txt"))
+        advanceUntilIdle()
+        gate.awaitEntered()
+
+        session.selectCommit(commits[2].hash)
+        advanceUntilIdle()
+        gate.release()
+        advanceUntilIdle()
+
+        assertNull(session.state.value.openDiff)
+        assertNull(session.state.value.openDiffTarget)
+        session.close()
+    }
+
+    @Test
+    fun stageAndUnstageExcludeConflicts() = runTest {
+        val commits = RandomDag.generate(seed = 39, commitCount = 10)
+        val status = WorkingStatus(
+            branchHead = commits.first().hash,
+            upstream = null,
+            ahead = 0,
+            behind = 0,
+            unborn = false,
+            entries = listOf(
+                StatusEntry("conflict.txt", null, 'U', 'U', StatusKind.UNMERGED),
+                StatusEntry("other.txt", null, 'M', ' ', StatusKind.ORDINARY),
+            ),
+        )
+        val backend = backend(commits, status = status)
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+
+        session.stage(listOf("conflict.txt", "other.txt"))
+        advanceUntilIdle()
+
+        assertEquals(listOf("other.txt"), backend.callsOf(FakeMethod.STAGE).single().paths)
+
+        backend.clearCalls()
+        session.unstage(listOf("conflict.txt"))
+        advanceUntilIdle()
+
+        assertTrue(backend.callsOf(FakeMethod.UNSTAGE).isEmpty())
+        assertTrue(session.state.value.message is UserMessage.Error)
+        session.close()
+    }
+
+    @Test
+    fun busyStaysSetThroughRefreshAndClearsAfterWrite() = runTest {
+        val commits = RandomDag.generate(seed = 40, commitCount = 10)
+        val backend = backend(commits)
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+        val statusGate = backend.pauseNext(FakeMethod.STATUS)
+
+        session.stage(listOf("a.txt"))
+        advanceUntilIdle()
+        statusGate.awaitEntered()
+
+        assertEquals(BusyOp.STAGE, session.state.value.busy)
+        assertEquals(SessionPhase.DRAINING, session.phase.value)
+
+        statusGate.release()
+        advanceUntilIdle()
+
+        assertNull(session.state.value.busy)
+        assertEquals(SessionPhase.ACTIVE, session.phase.value)
+        assertEquals(1, backend.callCount(FakeMethod.STAGE))
+        assertEquals(
+            listOf(FakeMethod.STAGE, FakeMethod.STATUS, FakeMethod.REFS, FakeMethod.HEAD),
+            backend.calls.map { it.method },
+        )
+        session.close()
+    }
+
+    @Test
+    fun pushAndPullAreSerializedWrites() = runTest {
+        val commits = RandomDag.generate(seed = 41, commitCount = 10)
+        val backend = backend(commits)
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+        val pushGate = backend.pauseNext(FakeMethod.PUSH)
+
+        val push = session.push()
+        advanceUntilIdle()
+        pushGate.awaitEntered()
+        assertEquals(BusyOp.PUSH, session.state.value.busy)
+
+        val pull = session.pull()
+        advanceUntilIdle()
+        assertEquals(0, backend.callCount(FakeMethod.PULL))
+
+        pushGate.release()
+        advanceUntilIdle()
+
+        assertTrue(push.isCompleted)
+        assertTrue(pull.isCompleted)
+        assertEquals(1, backend.callCount(FakeMethod.PUSH))
+        assertEquals(1, backend.callCount(FakeMethod.PULL))
+        assertEquals(1, backend.peakConcurrentWrites)
+        assertNull(session.state.value.busy)
+        assertTrue(session.state.value.message is UserMessage.Info)
+        session.close()
+    }
+
+    @Test
     fun detectsInProgressGitOperations() = runTest {
         val directory = Files.createTempDirectory("freetree-session-op")
         val gitDir = directory.resolve(".git")
@@ -381,6 +635,36 @@ class RepoSessionTest {
 
         assertNull(session.state.value.graph)
         assertEquals(SessionPhase.INACTIVE, session.phase.value)
+        session.close()
+    }
+
+    @Test
+    fun canceledRefreshLeavesFrozenGraphIdleAfterReactivation() = runTest {
+        val commits = RandomDag.generate(seed = 43, commitCount = 30)
+        val backend = backend(commits)
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        val frozen = session.state.value.graph!!
+        backend.clearCalls()
+        val gate = backend.pauseNext(FakeMethod.LOG)
+
+        session.refresh()
+        advanceUntilIdle()
+        gate.awaitEntered()
+        assertTrue(session.state.value.load is LoadState.Loading)
+
+        session.deactivate()
+        assertEquals(LoadState.Idle, session.state.value.load)
+        gate.release()
+        advanceUntilIdle()
+
+        session.activate()
+        advanceUntilIdle()
+
+        assertSame(frozen, session.state.value.graph)
+        assertEquals(LoadState.Idle, session.state.value.load)
+        assertEquals(1, backend.callCount(FakeMethod.LOG))
         session.close()
     }
 
