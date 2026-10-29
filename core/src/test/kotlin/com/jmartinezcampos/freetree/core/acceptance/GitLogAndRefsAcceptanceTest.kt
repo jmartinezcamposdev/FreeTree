@@ -111,6 +111,23 @@ class GitLogAndRefsAcceptanceTest {
     }
 
     @Test
+    fun refsSurviveGitGcAndStillMatchShowRef() = runBlocking {
+        repo.commitFile("a.txt", "a\n", "root")
+        val root = repo.headHash()
+        repo.createBranch("feature/after-gc").requireSuccess()
+        repo.git("tag", "-a", "v2.0", "-m", "release", root).requireSuccess()
+        repo.git("update-ref", "refs/remotes/upstream/main", root).requireSuccess()
+
+        repo.git("gc", "-q", "--prune=now").requireSuccess()
+        assertTrue(java.nio.file.Files.exists(repo.gitDir.resolve("packed-refs")), "git gc must pack refs")
+
+        val expected = repo.refsFromShowRef()
+        val actual = backend.refs().sortedBy { it.fullName }
+        assertEquals(expected, actual)
+        assertEquals(root, actual.single { it.fullName == "refs/tags/v2.0" }.commit)
+    }
+
+    @Test
     fun unbornRepositoryHasNoRefsOrCommits() = runBlocking {
         GitTestRepo.create().use { empty ->
             val emptyBackend = empty.openBackend()
