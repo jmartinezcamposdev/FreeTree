@@ -154,8 +154,8 @@ internal fun Toolbar(
         )
         Spacer(Modifier.width(GraphStyle.SPACE_MD))
         val status = state.status
-        val branch = status?.branchHead?.takeIf { it.isNotBlank() }
-            ?: state.head?.branchShortName
+        val branch = state.head?.branchShortName?.takeIf { it.isNotBlank() }
+            ?: status?.branchHead?.let(::abbreviateHash)
             ?: "detached HEAD"
         Text(
             text = branch,

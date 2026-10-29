@@ -66,7 +66,14 @@ internal fun ChangesPanel(
                 .weight(GraphStyle.FILL_WEIGHT)
                 .verticalScroll(rememberScrollState()),
         ) {
-            if (entries.isEmpty()) {
+            if (status == null) {
+                Text(
+                    text = "Loading working tree…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceMuted,
+                    modifier = Modifier.padding(GraphStyle.SPACE_LG),
+                )
+            } else if (entries.isEmpty()) {
                 Text(
                     text = "Working tree clean",
                     style = MaterialTheme.typography.bodyMedium,
