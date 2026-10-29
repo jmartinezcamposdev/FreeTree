@@ -32,12 +32,36 @@ class JdkRepoWatcherTest {
         val missing = root.resolve("missing-git-dir")
         val failures = mutableListOf<Throwable>()
         val watcher = JdkRepoWatcher(onFailure = { failures += it })
+        val baseline = watcherThreads()
 
         watcher.start(GitDirs(workTree = root, gitDir = missing, commonDir = missing), watchWorkTree = false) {}
 
         assertTrue(failures.isNotEmpty())
         assertNotNull(watcher.lastStartFailure)
+        assertTrue(waitForThreads(baseline), "failed start left a watcher thread")
         watcher.stop()
+    }
+
+    @Test
+    fun canRestartAfterAStartFailure() {
+        val missing = root.resolve("missing-git-dir")
+        val failures = CopyOnWriteArrayList<Throwable>()
+        val events = CopyOnWriteArrayList<WatchEvent>()
+        val watcher = JdkRepoWatcher(onFailure = { failures += it })
+        watcher.start(
+            GitDirs(workTree = root, gitDir = missing, commonDir = missing),
+            watchWorkTree = false,
+        ) {}
+        assertTrue(failures.isNotEmpty())
+
+        val dirs = fakeRepository()
+        watcher.start(dirs, watchWorkTree = false, onEvent = { events += it })
+        try {
+            Files.writeString(dirs.gitDir.resolve("index"), "index")
+            assertTrue(waitFor(events) { it == WatchEvent.STATUS_CHANGED }, "restart event missing: $events")
+        } finally {
+            watcher.stop()
+        }
     }
 
     @Test
@@ -100,17 +124,31 @@ class JdkRepoWatcherTest {
     }
 
     @Test
-    fun excludesBuildDirectoriesFromTheWorkTree() {
+    fun excludesDocumentedDirectoriesFromTheWorkTree() {
         val dirs = fakeRepository()
-        Files.createDirectories(dirs.workTree.resolve("node_modules/pkg"))
-        Files.createDirectories(dirs.workTree.resolve("build"))
+        val excluded = listOf(
+            "node_modules",
+            "build",
+            "target",
+            ".gradle",
+            ".idea",
+            "dist",
+            "out",
+            "__pycache__",
+            ".venv",
+        )
+        excluded.forEach { name ->
+            Files.createDirectories(dirs.workTree.resolve("$name/pkg"))
+        }
         val events = CopyOnWriteArrayList<WatchEvent>()
         val watcher = JdkRepoWatcher()
         watcher.start(dirs, watchWorkTree = true, onEvent = { events += it })
         try {
-            Files.writeString(dirs.workTree.resolve("node_modules/pkg/file.txt"), "ignored")
-            Files.writeString(dirs.workTree.resolve("build/output.txt"), "ignored")
-            Thread.sleep(800)
+            excluded.forEach { name ->
+                Files.writeString(dirs.workTree.resolve("$name/pkg/file.txt"), "ignored")
+            }
+            Files.writeString(dirs.workTree.resolve(".git/config"), "ignored")
+            Thread.sleep(1_000)
             assertTrue(events.isEmpty(), events.toString())
 
             Files.writeString(dirs.workTree.resolve("src/visible.txt"), "visible")
@@ -118,6 +156,134 @@ class JdkRepoWatcherTest {
         } finally {
             watcher.stop()
         }
+    }
+
+    @Test
+    fun watchWorkTreeFalseIgnoresWorkTreeChanges() {
+        val dirs = fakeRepository()
+        val events = CopyOnWriteArrayList<WatchEvent>()
+        val watcher = JdkRepoWatcher()
+        watcher.start(dirs, watchWorkTree = false, onEvent = { events += it })
+        try {
+            Files.writeString(dirs.workTree.resolve("src/ignored.txt"), "ignored")
+            Thread.sleep(800)
+            assertTrue(events.isEmpty(), events.toString())
+
+            Files.writeString(dirs.gitDir.resolve("index"), "index")
+            assertTrue(waitFor(events) { it == WatchEvent.STATUS_CHANGED }, "index event missing: $events")
+        } finally {
+            watcher.stop()
+        }
+    }
+
+    @Test
+    fun operationFilesAndRebaseDirectoriesProduceStatusEvents() {
+        val dirs = fakeRepository()
+        val events = CopyOnWriteArrayList<WatchEvent>()
+        val watcher = JdkRepoWatcher()
+        watcher.start(dirs, watchWorkTree = false, onEvent = { events += it })
+        try {
+            listOf("MERGE_HEAD", "REBASE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD").forEach { name ->
+                events.clear()
+                Files.writeString(dirs.gitDir.resolve(name), "0123456789")
+                assertTrue(
+                    waitFor(events) { it == WatchEvent.STATUS_CHANGED },
+                    "$name event missing: $events",
+                )
+            }
+
+            listOf("rebase-merge", "rebase-apply").forEach { name ->
+                events.clear()
+                val directory = dirs.gitDir.resolve(name)
+                Files.createDirectories(directory)
+                Files.writeString(directory.resolve("head-name"), "refs/heads/main")
+                assertTrue(
+                    waitFor(events) { it == WatchEvent.STATUS_CHANGED },
+                    "$name event missing: $events",
+                )
+            }
+        } finally {
+            watcher.stop()
+        }
+    }
+
+    @Test
+    fun watchesRefDirectoriesCreatedAfterStart() {
+        val dirs = fakeRepository()
+        val events = CopyOnWriteArrayList<WatchEvent>()
+        val watcher = JdkRepoWatcher()
+        watcher.start(dirs, watchWorkTree = false, onEvent = { events += it })
+        try {
+            Files.createDirectories(dirs.commonDir.resolve("refs/heads/created-later"))
+            assertTrue(waitFor(events) { it == WatchEvent.REFS_CHANGED }, "refs event missing: $events")
+
+            events.clear()
+            Files.writeString(dirs.commonDir.resolve("refs/heads/created-later/feature"), "0123456789")
+            assertTrue(waitFor(events) { it == WatchEvent.REFS_CHANGED }, "nested refs event missing: $events")
+        } finally {
+            watcher.stop()
+        }
+    }
+
+    @Test
+    fun burstsAreDebouncedIntoSingleStatusEvents() {
+        val dirs = fakeRepository()
+        val events = CopyOnWriteArrayList<WatchEvent>()
+        val watcher = JdkRepoWatcher()
+        watcher.start(dirs, watchWorkTree = true, onEvent = { events += it })
+        try {
+            repeat(50) { index ->
+                Files.writeString(dirs.workTree.resolve("src/burst-$index.txt"), "burst")
+            }
+            assertTrue(waitFor(events) { it == WatchEvent.STATUS_CHANGED }, "burst event missing: $events")
+            Thread.sleep(1_000)
+
+            assertTrue(events.count { it == WatchEvent.STATUS_CHANGED } in 1..5, events.toString())
+        } finally {
+            watcher.stop()
+        }
+    }
+
+    @Test
+    fun directoryCapStopsWatchingNewDirectories() {
+        val dirs = fakeRepository()
+        repeat(3) { Files.createDirectories(dirs.workTree.resolve("early-$it")) }
+        val warnings = CopyOnWriteArrayList<String>()
+        val events = CopyOnWriteArrayList<WatchEvent>()
+        val watcher = JdkRepoWatcher(
+            onWarning = { warnings += it },
+            workTreeDirectoryCap = 2,
+        )
+        watcher.start(dirs, watchWorkTree = true, onEvent = { events += it })
+        try {
+            assertTrue(watcher.partialWatch)
+            assertTrue(warnings.any { it.contains("part") }, warnings.toString())
+
+            val late = dirs.workTree.resolve("created-after-cap")
+            Files.createDirectories(late)
+            assertTrue(waitFor(events) { it == WatchEvent.STATUS_CHANGED }, "directory event missing: $events")
+
+            events.clear()
+            Files.writeString(late.resolve("unwatched.txt"), "unwatched")
+            Thread.sleep(800)
+            assertTrue(events.isEmpty(), events.toString())
+        } finally {
+            watcher.stop()
+        }
+    }
+
+    @Test
+    fun stopTerminatesItsThreadAndIsIdempotent() {
+        val dirs = fakeRepository()
+        val baseline = watcherThreads()
+        val watcher = JdkRepoWatcher()
+        watcher.start(dirs, watchWorkTree = true) {}
+        assertTrue(waitForThreads(baseline + 1), "watcher thread did not start")
+
+        watcher.stop()
+        watcher.stop()
+
+        assertTrue(waitForThreads(baseline), "watcher thread still alive: ${watcherThreads()}")
     }
 
     @Test
@@ -204,6 +370,18 @@ class JdkRepoWatcherTest {
         val deadline = System.nanoTime() + timeoutMillis * 1_000_000
         while (System.nanoTime() < deadline) {
             if (events.any(predicate)) return true
+            Thread.sleep(25)
+        }
+        return false
+    }
+
+    private fun watcherThreads(): Int =
+        Thread.getAllStackTraces().keys.count { it.name == "freetree-repo-watcher" && it.isAlive }
+
+    private fun waitForThreads(expected: Int, timeoutMillis: Long = 3_000): Boolean {
+        val deadline = System.nanoTime() + timeoutMillis * 1_000_000
+        while (System.nanoTime() < deadline) {
+            if (watcherThreads() == expected) return true
             Thread.sleep(25)
         }
         return false

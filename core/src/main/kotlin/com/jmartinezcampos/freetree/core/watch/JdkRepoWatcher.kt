@@ -11,6 +11,7 @@ import java.nio.file.Path
 import java.nio.file.StandardWatchEventKinds.ENTRY_CREATE
 import java.nio.file.StandardWatchEventKinds.ENTRY_DELETE
 import java.nio.file.StandardWatchEventKinds.ENTRY_MODIFY
+import java.nio.file.StandardWatchEventKinds.OVERFLOW
 import java.nio.file.WatchKey
 import java.nio.file.WatchService
 import java.util.concurrent.atomic.AtomicBoolean
@@ -46,7 +47,9 @@ class JdkRepoWatcher(
         partialWatch = false
         lastStartFailure = null
         val watchScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-        val debouncer = Debouncer(watchScope, onEmit = onEvent)
+        val debouncer = Debouncer(watchScope, onEmit = { event ->
+            if (!stopped.get()) onEvent(event)
+        })
         val watchService = try {
             FileSystems.getDefault().newWatchService()
         } catch (e: IOException) {
@@ -62,10 +65,10 @@ class JdkRepoWatcher(
         try {
             registrar.registerBase(watchWorkTree)
         } catch (e: IOException) {
-            debouncer.close()
-            watchScope.cancel()
-            watchService.close()
-            reportStartFailure(e)
+            failStart(watchService, debouncer, watchScope, e)
+            return
+        } catch (e: RuntimeException) {
+            failStart(watchService, debouncer, watchScope, e)
             return
         }
 
@@ -103,6 +106,18 @@ class JdkRepoWatcher(
         thread = null
     }
 
+    private fun failStart(
+        watchService: WatchService,
+        debouncer: Debouncer,
+        watchScope: CoroutineScope,
+        error: Throwable,
+    ) {
+        debouncer.close()
+        watchScope.cancel()
+        watchService.close()
+        reportStartFailure(error)
+    }
+
     private fun reportStartFailure(error: Throwable) {
         stopped.set(true)
         lastStartFailure = error
@@ -128,7 +143,11 @@ class JdkRepoWatcher(
             try {
                 val watchedDirectory = key.watchable() as Path
                 for (event in key.pollEvents()) {
-                    val relative = event.context() as? Path ?: continue
+                    val relative = event.context() as? Path
+                    if (relative == null) {
+                        if (event.kind() == OVERFLOW) debouncer.offer(WatchEvent.REFS_CHANGED)
+                        continue
+                    }
                     val path = watchedDirectory.resolve(relative)
                     if (event.kind() == ENTRY_CREATE && isDirectory(path)) {
                         registrar.registerNewDirectory(path)
@@ -136,9 +155,12 @@ class JdkRepoWatcher(
                     EventClassifier.classify(path, dirs)?.let(debouncer::offer)
                 }
             } catch (e: ClosedWatchServiceException) {
+                if (!stopped.get()) onFailure(e)
                 return
             } catch (e: IOException) {
-                onFailure(e)
+                if (!stopped.get()) onFailure(e)
+            } catch (e: RuntimeException) {
+                if (!stopped.get()) onFailure(e)
             } finally {
                 val valid = try {
                     key.reset()
