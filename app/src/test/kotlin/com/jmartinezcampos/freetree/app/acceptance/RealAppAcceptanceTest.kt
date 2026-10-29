@@ -1,12 +1,15 @@
 package com.jmartinezcampos.freetree.app.acceptance
 
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
 import com.jmartinezcampos.freetree.app.ui.UiTestTags
@@ -23,6 +26,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -192,6 +196,234 @@ class RealAppAcceptanceTest {
                 onNodeWithTag(UiTestTags.MESSAGE_STDERR).assertExists()
                 assertEquals(localHead, repo.headHash())
                 assertNotNull(state(manager).graph)
+            } finally {
+                manager.close()
+                repo.close()
+            }
+        }
+
+    @Test
+    fun realHistoryShowsMergeNodeRefChipsAndHead() =
+        runDesktopComposeUiTest(width = 1500, height = 950) {
+            val repo = GitTestRepo.create()
+            val manager = realSessionManager()
+            try {
+                repo.writeFile("README.md", "root\n")
+                val root = repo.commitAll("root")
+                repo.git("tag", "-a", "v1.0", "-m", "release", root).requireSuccess()
+                repo.checkoutNewBranch("feature/topic").requireSuccess()
+                repo.commitFile("topic.txt", "topic\n", "topic commit")
+                repo.checkout("main").requireSuccess()
+                repo.commitFile("main.txt", "main\n", "main commit")
+                repo.merge("feature/topic").requireSuccess()
+                val merge = repo.headHash()
+                repo.createBareOrigin()
+                repo.git("push", "-u", "origin", "main").requireSuccess()
+                repo.createBranch("release/1.0").requireSuccess()
+
+                setContent { App(manager) }
+                manager.openRepo(repo.workTree)
+                awaitLoaded(manager)
+
+                val state = state(manager)
+                val graph = assertNotNull(state.graph)
+                val mergeRow = graph.indexOfHash(merge)
+                assertTrue(mergeRow >= 0, "merge commit missing from the graph")
+                assertEquals(2, graph.parentCount(mergeRow))
+                assertEquals(merge, state.head?.commit)
+                assertEquals("main", state.head?.branchShortName)
+
+                val mergeLabels = state.labelsByCommit.getValue(merge).map { it.fullName }.toSet()
+                assertTrue("refs/heads/main" in mergeLabels)
+                assertTrue("refs/remotes/origin/main" in mergeLabels)
+                assertTrue("refs/heads/release/1.0" in mergeLabels)
+                assertEquals(
+                    "refs/tags/v1.0",
+                    state.labelsByCommit.getValue(root).single().fullName,
+                )
+
+                onNodeWithTag(UiTestTags.commitRowForHash(merge)).assertExists()
+                onNodeWithText("HEAD").assertExists()
+                onNodeWithText("release/1.0").assertExists()
+                onNodeWithText("+1").assertExists()
+                onNodeWithText("v1.0").assertExists()
+            } finally {
+                manager.close()
+                repo.close()
+            }
+        }
+
+    @Test
+    fun realCommitSelectionShowsTextAndBinaryDiffs() =
+        runDesktopComposeUiTest(width = 1500, height = 950) {
+            val repo = GitTestRepo.create()
+            val manager = realSessionManager()
+            try {
+                repo.writeFile("text.txt", "one\n")
+                repo.writeBytes("binary.bin", byteArrayOf(0, 1, 2, 3))
+                repo.commitAll("root")
+                repo.writeFile("text.txt", "one\ntwo\n")
+                repo.writeBytes("binary.bin", byteArrayOf(0, 9, 8, 7))
+                val commit = repo.commitAll("text and binary")
+
+                setContent { App(manager) }
+                manager.openRepo(repo.workTree)
+                awaitLoaded(manager)
+
+                onNodeWithTag(UiTestTags.commitRowForHash(commit)).performClick()
+                waitUntil(timeoutMillis = 20_000) {
+                    val current = state(manager)
+                    current.selection == Selection.Commit(commit) && current.changedFiles.size == 2
+                }
+                onNodeWithTag(UiTestTags.changedFile("text.txt")).performClick()
+                waitUntil(timeoutMillis = 20_000) {
+                    val diff = state(manager).openDiff
+                    diff != null && !diff.binary
+                }
+                onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
+                onNodeWithText("+two").assertExists()
+
+                onNodeWithTag(UiTestTags.changedFile("binary.bin")).performClick()
+                waitUntil(timeoutMillis = 20_000) {
+                    state(manager).openDiff?.binary == true
+                }
+                onNodeWithTag(UiTestTags.DIFF_BINARY).assertExists()
+                assertTrue(state(manager).openDiff?.lines?.none { it.text == "+two" } == true)
+            } finally {
+                manager.close()
+                repo.close()
+            }
+        }
+
+    @Test
+    fun realUiStagesDeletedFileAndCommitsMultilineMessageWithRename() =
+        runDesktopComposeUiTest(width = 1500, height = 950) {
+            val repo = GitTestRepo.create()
+            val manager = realSessionManager()
+            try {
+                repo.writeFile("delete.txt", "delete me\n")
+                repo.writeFile("rename old.txt", (1..20).joinToString("\n") { "line $it" } + "\n")
+                repo.writeFile("keep.txt", "keep\n")
+                repo.commitAll("root")
+                repo.deleteFile("delete.txt")
+                repo.renameTracked("rename old.txt", "rename new.txt").requireSuccess()
+                repo.writeFile("keep.txt", "keep changed\n")
+
+                setContent { App(manager) }
+                manager.openRepo(repo.workTree)
+                awaitLoaded(manager)
+                awaitStatus(manager) { it.path == "delete.txt" && it.worktree == 'D' }
+                awaitStatus(manager) { it.path == "rename new.txt" && it.index == 'R' }
+
+                onNodeWithTag(UiTestTags.CHANGES_ROW).performClick()
+                onNodeWithTag(UiTestTags.stagedFile("rename new.txt")).assertExists()
+                onNodeWithTag(UiTestTags.unstagedFile("delete.txt")).assertExists()
+                onNodeWithTag(UiTestTags.stageFile("delete.txt")).performClick()
+                awaitStatus(manager) {
+                    it.path == "delete.txt" && it.index == 'D' && it.worktree == ' '
+                }
+                assertEquals("D  delete.txt", repo.gitOk("status", "--porcelain=v1", "--", "delete.txt"))
+
+                val previousHead = repo.headHash()
+                val message = "Commit delete and rename\n\nBody line one\nBody line two"
+                onNodeWithTag(UiTestTags.COMMIT_MESSAGE).performTextReplacement(message)
+                onNodeWithTag(UiTestTags.COMMIT_BUTTON).performClick()
+                waitUntil(timeoutMillis = 20_000) {
+                    val current = state(manager)
+                    current.busy == null && current.head?.commit?.let { it != previousHead } == true
+                }
+                val head = repo.headHash()
+                assertEquals(message, repo.git("log", "-1", "--format=%B", head).stdout.trimEnd())
+                val nameStatus = repo.gitOk("show", "--name-status", "--format=", "-M", head).lines()
+                assertTrue(nameStatus.any { it.startsWith("D\tdelete.txt") }, nameStatus.toString())
+                assertTrue(
+                    nameStatus.any {
+                        it.startsWith("R") && it.contains("rename old.txt") && it.endsWith("rename new.txt")
+                    },
+                    nameStatus.toString(),
+                )
+                val remaining = repo.git("status", "--porcelain=v1").requireSuccess().stdout
+                    .trimEnd()
+                    .lines()
+                assertEquals(listOf(" M keep.txt"), remaining)
+                assertFalse(repo.exists("delete.txt"))
+                assertTrue(repo.exists("rename new.txt"))
+                waitUntil(timeoutMillis = 20_000) {
+                    val graph = state(manager).graph
+                    graph != null && graph.complete && graph.indexOfHash(head) >= 0
+                }
+            } finally {
+                manager.close()
+                repo.close()
+            }
+        }
+
+    @Test
+    fun realQueryHidesRefsFiltersFlatAndKeepsTheViewOnSyntaxErrors() =
+        runDesktopComposeUiTest(width = 1500, height = 950) {
+            val repo = GitTestRepo.create()
+            val manager = realSessionManager()
+            try {
+                repo.writeFile("README.md", "root\n")
+                repo.commitAll("root", authorName = "Ada", authorEmail = "ada@example.com")
+                repo.checkoutNewBranch("topic").requireSuccess()
+                val topic = repo.commitFile(
+                    relative = "topic.txt",
+                    content = "topic\n",
+                    message = "topic work",
+                    authorName = "Bob",
+                    authorEmail = "bob@example.com",
+                )
+                repo.checkout("main").requireSuccess()
+                repo.commitFile(
+                    relative = "main.txt",
+                    content = "main\n",
+                    message = "main work",
+                    authorName = "Ada",
+                    authorEmail = "ada@example.com",
+                )
+
+                setContent { App(manager) }
+                manager.openRepo(repo.workTree)
+                awaitLoaded(manager)
+
+                onNodeWithTag(UiTestTags.REFS_TOGGLE).performClick()
+                onNodeWithTag(UiTestTags.refItem("refs/heads/topic")).performClick()
+                waitUntil(timeoutMillis = 20_000) {
+                    val current = state(manager)
+                    "refs/heads/topic" in current.hiddenRefs &&
+                        current.graph?.complete == true &&
+                        current.graph!!.indexOfHash(topic) < 0
+                }
+
+                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextReplacement("author:Ada")
+                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
+                    keyDown(Key.Enter)
+                    keyUp(Key.Enter)
+                }
+                waitUntil(timeoutMillis = 20_000) {
+                    val current = state(manager)
+                    current.query == "author:Ada" &&
+                        current.queryError == null &&
+                        current.graph?.complete == true &&
+                        current.graph!!.flat
+                }
+                val filtered = assertNotNull(state(manager).graph)
+                assertTrue(filtered.rowCount > 0)
+                assertTrue((0 until filtered.rowCount).all { filtered.author(it) == "Ada" })
+                assertTrue(filtered.indexOfHash(topic) < 0)
+                onNodeWithText("Flat view (content filters active)").assertExists()
+
+                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextReplacement("bogus:value")
+                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
+                    keyDown(Key.Enter)
+                    keyUp(Key.Enter)
+                }
+                waitUntil(timeoutMillis = 20_000) {
+                    state(manager).queryError != null
+                }
+                assertSame(filtered, state(manager).graph)
+                onNodeWithTag(UiTestTags.QUERY_ERROR).assertExists()
             } finally {
                 manager.close()
                 repo.close()
