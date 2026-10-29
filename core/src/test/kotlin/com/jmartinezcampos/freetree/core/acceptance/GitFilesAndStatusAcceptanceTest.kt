@@ -91,6 +91,47 @@ class GitFilesAndStatusAcceptanceTest {
     }
 
     @Test
+    fun statusUsesSpacesForFullyStagedFullyUnstagedPartialAndRenameSides() = runBlocking {
+        val lines = (1..20).joinToString("\n") { "line $it" } + "\n"
+        repo.writeFile("staged.txt", "one\n")
+        repo.writeFile("unstaged.txt", "one\n")
+        repo.writeFile("partial.txt", "one\n")
+        repo.writeFile("rename old.txt", lines)
+        repo.commitAll("root")
+
+        repo.writeFile("staged.txt", "staged\n")
+        repo.stage("staged.txt").requireSuccess()
+        repo.writeFile("unstaged.txt", "unstaged\n")
+        repo.writeFile("partial.txt", "staged\n")
+        repo.stage("partial.txt").requireSuccess()
+        repo.writeFile("partial.txt", "staged and unstaged\n")
+        repo.renameTracked("rename old.txt", "rename new.txt").requireSuccess()
+
+        val status = assertStatusMatches(repo, backend)
+        val entries = status.entries.associateBy { it.path }
+
+        val staged = entries.getValue("staged.txt")
+        assertEquals('M', staged.index)
+        assertEquals(' ', staged.worktree)
+
+        val unstaged = entries.getValue("unstaged.txt")
+        assertEquals(' ', unstaged.index)
+        assertEquals('M', unstaged.worktree)
+
+        val partial = entries.getValue("partial.txt")
+        assertEquals('M', partial.index)
+        assertEquals('M', partial.worktree)
+
+        val rename = entries.getValue("rename new.txt")
+        assertEquals(StatusKind.RENAMED, rename.kind)
+        assertEquals("rename old.txt", rename.origPath)
+        assertEquals('R', rename.index)
+        assertEquals(' ', rename.worktree)
+
+        assertTrue(status.entries.none { it.index == '.' || it.worktree == '.' })
+    }
+
+    @Test
     fun statusMatchesPorcelainV1ForUnbornAndStagedDeletion() = runBlocking {
         GitTestRepo.create().use { empty ->
             val emptyBackend = empty.openBackend()

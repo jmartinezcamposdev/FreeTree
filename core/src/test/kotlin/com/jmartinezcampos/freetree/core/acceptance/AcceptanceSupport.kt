@@ -186,19 +186,15 @@ internal suspend fun assertStatusMatches(
     expected.forEach { expectedEntry ->
         val path = expectedEntry.path
         val actual = actualByPath.getValue(path)
-        assertEquals(
-            expectedEntry.code[0].normalizeStatusChar(),
-            actual.index.normalizeStatusChar(),
-            "index status for $path",
-        )
-        assertEquals(
-            expectedEntry.code[1].normalizeStatusChar(),
-            actual.worktree.normalizeStatusChar(),
-            "worktree status for $path",
-        )
+        assertEquals(expectedEntry.code[0], actual.index, "index status for $path")
+        assertEquals(expectedEntry.code[1], actual.worktree, "worktree status for $path")
         assertEquals(expectedKind(expectedEntry.code), actual.kind, "status kind for $path")
         assertEquals(expectedEntry.origPath, actual.origPath, "original path for $path")
     }
+    assertTrue(
+        status.entries.none { it.index == '.' || it.worktree == '.' },
+        "unchanged status sides must be spaces: ${status.entries}",
+    )
 
     if (repo.hasHead()) {
         assertEquals(repo.headHash(), status.branchHead, "branch head")
@@ -212,13 +208,11 @@ internal suspend fun assertStatusMatches(
 
 internal suspend fun assertStagedMatchesStatus(repo: GitTestRepo, backend: CliGitBackend) {
     val actual = backend.status().entries
-        .filter { it.index != '.' && it.index != '?' && it.index != 'U' }
+        .filter { it.index != ' ' && it.index != '?' && it.index != 'U' }
         .map { it.path }
         .toSet()
     assertEquals(repo.stagedPaths(), actual, "staged path set")
 }
-
-private fun Char.normalizeStatusChar(): Char = if (this == '.') ' ' else this
 
 private fun expectedKind(code: String): StatusKind = when {
     code == "??" -> StatusKind.UNTRACKED
