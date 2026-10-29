@@ -73,8 +73,7 @@ when it is downloaded on another machine.
 
 ## Benchmarks
 
-Benchmarks are opt-in and are never part of `check`. The benchmark task comes from the Phase 4
-performance workstream; once it is merged, run:
+Benchmarks are opt-in and are never part of `check`. Run:
 
 ```bash
 ./gradlew bench
