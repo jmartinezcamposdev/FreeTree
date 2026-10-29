@@ -174,6 +174,27 @@ class GitTestRepoTest {
     }
 
     @Test
+    fun supportsUnicodePathsAndRawGitHelpers() {
+        GitTestRepo.create().use { repo ->
+            val unicodePath = "dir with space/naïve-文件.txt"
+            repo.commitFile(unicodePath, "unicode\n", "unicode path")
+
+            assertEquals("unicode\n", repo.readFile(unicodePath))
+            assertTrue(repo.statusPorcelain().isEmpty())
+
+            val blob = repo.gitWithInput("hello\n", "hash-object", "--stdin").requireSuccess().stdout.trim()
+            assertEquals(40, blob.length)
+
+            val origin = repo.createBareOrigin()
+            repo.push().requireSuccess()
+            assertEquals(
+                "true",
+                repo.gitIn(origin.path, "rev-parse", "--is-bare-repository").requireSuccess().stdout.trim(),
+            )
+        }
+    }
+
+    @Test
     fun closeDeletesTheTemporaryTree() {
         val repo = GitTestRepo.create()
         val root = repo.root
