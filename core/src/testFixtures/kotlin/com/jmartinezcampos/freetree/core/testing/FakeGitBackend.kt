@@ -75,7 +75,8 @@ class SuspensionGate internal constructor() {
 
 /**
  * In-memory [GitBackend] for session tests. All state is replaceable snapshots; the call log and
- * concurrency counters are guarded by a private lock.
+ * concurrency counters are guarded by a private lock. Write methods return configured results and do
+ * not mutate snapshots; [logStream] emits [commits] in order and records the received [LogSpec].
  */
 class FakeGitBackend(
     commits: List<RawCommit> = emptyList(),
