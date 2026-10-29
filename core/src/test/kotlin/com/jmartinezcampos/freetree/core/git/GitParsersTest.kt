@@ -98,6 +98,7 @@ class GitParsersTest {
         assertEquals(StatusKind.RENAMED, rename.kind)
         assertEquals("status-old.txt", rename.origPath)
         assertEquals('R', rename.index)
+        assertEquals(' ', rename.worktree)
 
         val newline = status.entries.single { it.path == "line\nbreak.txt" }
         assertEquals(StatusKind.UNTRACKED, newline.kind)
@@ -108,6 +109,40 @@ class GitParsersTest {
             status.entries.single { it.kind == StatusKind.UNTRACKED && it.path != "line\nbreak.txt" }.path,
         )
         assertEquals('D', status.entries.single { it.path == "deleted-unstaged.txt" }.worktree)
+        assertEquals(' ', status.entries.single { it.path == "deleted-unstaged.txt" }.index)
+        assertTrue(status.entries.none { it.index == '.' || it.worktree == '.' })
+    }
+
+    @Test
+    fun statusNormalizesPorcelainV2UnchangedSidesToSpaces() {
+        val status = GitParsers.parseStatus(fixture("status_dots.bin"))
+        val entries = status.entries.associateBy { it.path }
+        assertEquals(5, entries.size)
+
+        val staged = entries.getValue("staged.txt")
+        assertEquals('M', staged.index)
+        assertEquals(' ', staged.worktree)
+
+        val unstaged = entries.getValue("unstaged.txt")
+        assertEquals(' ', unstaged.index)
+        assertEquals('M', unstaged.worktree)
+
+        val partial = entries.getValue("partial.txt")
+        assertEquals('M', partial.index)
+        assertEquals('M', partial.worktree)
+
+        val rename = entries.getValue("new.txt")
+        assertEquals(StatusKind.RENAMED, rename.kind)
+        assertEquals('R', rename.index)
+        assertEquals(' ', rename.worktree)
+        assertEquals("old.txt", rename.origPath)
+
+        val unmerged = entries.getValue("conflict.txt")
+        assertEquals(StatusKind.UNMERGED, unmerged.kind)
+        assertEquals('U', unmerged.index)
+        assertEquals('U', unmerged.worktree)
+
+        assertTrue(status.entries.none { it.index == '.' || it.worktree == '.' })
     }
 
     @Test
@@ -116,6 +151,8 @@ class GitParsersTest {
         assertTrue(unborn.unborn)
         assertNull(unborn.branchHead)
         assertEquals(1, unborn.entries.size)
+        assertEquals('A', unborn.entries.single().index)
+        assertEquals(' ', unborn.entries.single().worktree)
 
         val detached = GitParsers.parseStatus(fixture("status_detached.bin"))
         assertFalse(detached.unborn)

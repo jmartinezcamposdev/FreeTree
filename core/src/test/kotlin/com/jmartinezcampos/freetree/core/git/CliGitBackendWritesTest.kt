@@ -39,11 +39,11 @@ class CliGitBackendWritesTest {
         assertOk(backend.stage(listOf("a.txt")))
         var entry = backend.status().entries.single { it.path == "a.txt" }
         assertEquals('M', entry.index)
-        assertEquals('.', entry.worktree)
+        assertEquals(' ', entry.worktree)
 
         assertOk(backend.unstage(listOf("a.txt")))
         entry = backend.status().entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('M', entry.worktree)
         assertEquals("two\n", Files.readString(repo.root.resolve("a.txt")))
     }
@@ -57,11 +57,11 @@ class CliGitBackendWritesTest {
         assertOk(backend.stage(listOf("a.txt")))
         var entry = backend.status().entries.single { it.path == "a.txt" }
         assertEquals('D', entry.index)
-        assertEquals('.', entry.worktree)
+        assertEquals(' ', entry.worktree)
 
         assertOk(backend.unstage(listOf("a.txt")))
         entry = backend.status().entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('D', entry.worktree)
     }
 
@@ -159,7 +159,7 @@ class CliGitBackendWritesTest {
         val renamed = entries.single { it.kind == StatusKind.RENAMED }
         assertEquals("new.txt", renamed.path)
         assertEquals("old.txt", renamed.origPath)
-        assertEquals('.', renamed.worktree)
+        assertEquals(' ', renamed.worktree)
         assertTrue(entries.none { it.path == "old.txt" })
     }
 
@@ -172,7 +172,7 @@ class CliGitBackendWritesTest {
         assertOk(backend.unstage(listOf("new.txt")))
 
         val entries = backend.status().entries.associateBy { it.path }
-        assertEquals('.', entries.getValue("old.txt").index)
+        assertEquals(' ', entries.getValue("old.txt").index)
         assertEquals('D', entries.getValue("old.txt").worktree)
         assertEquals(StatusKind.UNTRACKED, entries.getValue("new.txt").kind)
         assertEquals("old.txt\n", repo.git("ls-files"))
@@ -210,7 +210,7 @@ class CliGitBackendWritesTest {
         assertOk(backend.discardStaged(listOf("a.txt")))
 
         val entry = backend.status().entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('M', entry.worktree)
         assertEquals("two\n", Files.readString(repo.root.resolve("a.txt")))
         assertEquals("one\n", repo.git("show", "HEAD:a.txt"))
@@ -294,7 +294,7 @@ class CliGitBackendWritesTest {
         assertOk(backend.discardStaged(listOf("new.txt")))
 
         val entries = backend.status().entries.associateBy { it.path }
-        assertEquals('.', entries.getValue("old.txt").index)
+        assertEquals(' ', entries.getValue("old.txt").index)
         assertEquals('D', entries.getValue("old.txt").worktree)
         assertEquals(StatusKind.UNTRACKED, entries.getValue("new.txt").kind)
         assertTrue(Files.exists(repo.root.resolve("new.txt")))
@@ -312,7 +312,7 @@ class CliGitBackendWritesTest {
         assertOk(backend.discardStaged(listOf("a.txt")))
 
         val entry = backend.status().entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('D', entry.worktree)
         assertFalse(Files.exists(repo.root.resolve("a.txt")))
     }
@@ -330,7 +330,7 @@ class CliGitBackendWritesTest {
         assertEquals("two\n", Files.readString(repo.root.resolve("a.txt")))
         val entry = backend.status().entries.single { it.path == "a.txt" }
         assertEquals('M', entry.index)
-        assertEquals('.', entry.worktree)
+        assertEquals(' ', entry.worktree)
         assertEquals("two\n", repo.git("show", ":a.txt"))
     }
 

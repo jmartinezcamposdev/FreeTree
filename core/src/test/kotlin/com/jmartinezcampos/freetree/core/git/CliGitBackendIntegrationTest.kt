@@ -304,7 +304,7 @@ class CliGitBackendIntegrationTest {
         val status = backend.status()
         assertFalse(status.unborn)
         assertEquals(repo.head(), status.branchHead)
-        assertEquals(v1Entries(repo), status.entries.map { it.path to "${it.index}${it.worktree}".replace('.', ' ') }.toSet())
+        assertEquals(v1Entries(repo), status.entries.map { it.path to "${it.index}${it.worktree}" }.toSet())
 
         val rename = status.entries.single { it.kind == StatusKind.RENAMED }
         assertEquals("status new.txt", rename.path)
