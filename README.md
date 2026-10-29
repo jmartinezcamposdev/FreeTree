@@ -1,29 +1,50 @@
-This is a Kotlin Multiplatform project targeting Desktop (JVM).
+# FreeTree
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-    - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-    - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-      For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-      the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-      Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-      folder is the appropriate location.
+FreeTree is a desktop Git graph client built with Kotlin and Compose Multiplatform Desktop.
 
-### Running the apps
+## Requirements
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and
-options:
+- **JDK 25** for compilation and running the app. The build uses `jvmToolchain(25)`; Gradle can
+  provision a matching JDK through the foojay resolver when one is not installed locally.
+- **Git 2.30 or newer** on `PATH`.
+- macOS is the primary development platform; Linux and Windows follow.
 
-- Desktop app:
-    - Hot reload: `./gradlew :desktopApp:hotRun --auto`
-    - Standard run: `./gradlew :desktopApp:run`
+## Modules
 
-### Running tests
+- `core/` — pure Kotlin/JVM. Models, Git backend contracts, graph, query, watcher, and session
+  contracts. No Compose.
+- `app/` — Compose Multiplatform Desktop application.
 
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
+## Build and test
 
-- Desktop tests: `./gradlew :shared:jvmTest`
+```bash
+./gradlew build
+./gradlew :core:test
+./gradlew check
+```
 
----
+## Run
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+```bash
+./gradlew :app:run
+```
+
+## Packaging
+
+The application is named `FreeTree` and uses the version in `app/build.gradle.kts`.
+
+```bash
+./gradlew :app:packageDmg   # macOS
+./gradlew :app:packageDeb   # Linux
+./gradlew :app:packageMsi   # Windows
+```
+
+Packaging requires the target operating system, a JDK 25 with `jpackage`, and the platform
+packaging tools (for example, `dpkg` on Debian-based Linux).
+
+## Documentation
+
+- [docs/SPEC.md](docs/SPEC.md) — specification index and decisions
+- [docs/01-bootstrap.md](docs/01-bootstrap.md) — layout and Phase 0
+- [PROGRESS.md](PROGRESS.md) — phase status and command evidence
+- [DECISIONS.md](DECISIONS.md) — decision log
