@@ -1,0 +1,3 @@
+diff --git a/binary.bin b/binary.bin
+index f7c6699..28ef82e 100644
+Binary files a/binary.bin and b/binary.bin differ
