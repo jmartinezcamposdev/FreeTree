@@ -129,8 +129,10 @@ All Gradle commands were run with `JAVA_HOME=~/.sdkman/candidates/java/25.0.1-zu
 | Main final gate: `./gradlew clean build :core:test --rerun-tasks --no-build-cache` | **BUILD SUCCESSFUL in 48s**; 15 actionable tasks executed |
 | Main exact gate: `./gradlew :core:test` | **BUILD SUCCESSFUL in 472ms**; 7 tasks up-to-date; exit 0 |
 | Main exact gate: `./gradlew build` | **BUILD SUCCESSFUL in 743ms**; 13 tasks up-to-date; exit 0 |
+| Main quality gate: `./gradlew check` | **BUILD SUCCESSFUL in 643ms**; 13 tasks up-to-date |
 | Integrated test report | 28 suites, **220 tests, 0 failures, 0 errors** |
 | `grep` quality scans | No `TODO(`/`FIXME`/`NotImplementedError`; no Compose/AWT/Swing imports in `core`; no empty `catch` blocks |
+| Worktree cleanup | Four merged worktrees removed; `phase1/*` branches retained |
 
 ### Phase 1 final verification
 
@@ -138,6 +140,7 @@ All Gradle commands were run with `JAVA_HOME=~/.sdkman/candidates/java/25.0.1-zu
   tasks executed; 220 tests, 0 failures, 0 errors.
 - `./gradlew :core:test` → `BUILD SUCCESSFUL`.
 - `./gradlew build` → `BUILD SUCCESSFUL`.
+- `./gradlew check` → `BUILD SUCCESSFUL`.
 - `T1`–`T7` covered by SESSION tests with fakes and virtual time.
 - No new dependencies; no shell/JGit/libgit2; `core` remains free of Compose/AWT/Swing.
 - `temp/` was not modified. No Phase 2/UI work was started.
