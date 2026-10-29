@@ -109,6 +109,7 @@ class CliGitBackend private constructor(
                 if (entry?.kind == StatusKind.UNTRACKED) {
                     readUntracked(target.path, maxBytes)
                 } else {
+                    requireStillPresent(target.path, entry)
                     val args = mutableListOf("diff", "--no-color", "--no-ext-diff", "--", target.path)
                     entry?.origPath?.let(args::add)
                     runDiff(args, maxBytes)
@@ -116,6 +117,7 @@ class CliGitBackend private constructor(
             }
             is DiffTarget.Staged -> {
                 val entry = statusEntry(target.path)
+                requireStillPresent(target.path, entry)
                 val args = mutableListOf("diff", "--no-color", "--no-ext-diff", "--cached", "--", target.path)
                 entry?.origPath?.let(args::add)
                 runDiff(args, maxBytes)
@@ -263,6 +265,18 @@ class CliGitBackend private constructor(
 
     private suspend fun statusEntry(path: String): StatusEntry? =
         status().entries.firstOrNull { it.path == path }
+
+    /**
+     * A status snapshot can be stale by the time a diff is requested. When Git no longer reports
+     * the path and it is also gone from disk, fail clearly instead of returning an empty diff.
+     */
+    private fun requireStillPresent(path: String, entry: StatusEntry?) {
+        if (entry != null) return
+        val resolved = resolveWorkTreePath(path)
+        if (resolved == null || !Files.exists(resolved, LinkOption.NOFOLLOW_LINKS)) {
+            throw GitException(1, "Path is no longer present: $path")
+        }
+    }
 
     private suspend fun headPaths(candidates: List<String>): Set<String> {
         val output = requireText(
@@ -422,23 +436,29 @@ class CliGitBackend private constructor(
         }
 
         private suspend fun readGitDirs(runner: GitRunner, workingDirectory: Path): GitDirs {
-            val result = runner.run(
-                listOf("rev-parse", "--show-toplevel", "--absolute-git-dir", "--git-common-dir"),
-            )
-            if (!result.succeeded) throw GitException(result.exitCode, result.stderr)
-            val lines = result.stdoutText().lineSequence().filter { it.isNotBlank() }.toList()
-            if (lines.size < 3) {
-                throw GitException(0, "Unexpected git rev-parse output: ${result.stdoutText()}")
-            }
-            val workTree = Path.of(lines[0]).toAbsolutePath().normalize()
-            val gitDir = Path.of(lines[1]).toAbsolutePath().normalize()
-            val commonValue = Path.of(lines[2])
-            val commonDir = if (commonValue.isAbsolute) {
-                commonValue.normalize()
+            // One value per invocation: a work-tree path may contain a newline, so a combined
+            // line-based rev-parse cannot be split reliably. rev-parse appends exactly one
+            // terminator, which is removed without trimming the path itself.
+            val workTree = Path.of(revParseValue(runner, "--show-toplevel")).toAbsolutePath().normalize()
+            val gitDir = Path.of(revParseValue(runner, "--absolute-git-dir")).toAbsolutePath().normalize()
+            val commonPath = Path.of(revParseValue(runner, "--git-common-dir"))
+            val commonDir = if (commonPath.isAbsolute) {
+                commonPath.normalize()
             } else {
-                workingDirectory.resolve(commonValue).normalize()
+                workingDirectory.resolve(commonPath).normalize()
             }
             return GitDirs(workTree = workTree, gitDir = gitDir, commonDir = commonDir)
+        }
+
+        private suspend fun revParseValue(runner: GitRunner, option: String): String {
+            val result = runner.run(listOf("rev-parse", option))
+            if (!result.succeeded) throw GitException(result.exitCode, result.stderr)
+            var value = result.stdoutText().removeSuffix("\n")
+            if (java.io.File.separatorChar == '\\') value = value.removeSuffix("\r")
+            if (value.isEmpty()) {
+                throw GitException(0, "Unexpected git rev-parse $option output: ${result.stdoutText()}")
+            }
+            return value
         }
     }
 }
