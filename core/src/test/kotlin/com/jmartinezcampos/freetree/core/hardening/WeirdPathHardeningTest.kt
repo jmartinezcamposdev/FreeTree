@@ -22,6 +22,8 @@ class WeirdPathHardeningTest {
 
     @Test
     fun newlineInTheWorkTreePathResolvesGitDirsAndSupportsReadsAndWrites() = runBlocking {
+        // Windows file names cannot contain a newline.
+        if (isWindows()) return@runBlocking
         val repo = GitTestRepo.create()
         val worktreeParent = Files.createTempDirectory("freetree-hardening-wt-")
         val worktree = worktreeParent.resolve("work tree\nline")
