@@ -121,11 +121,12 @@ internal object GitParsers {
                 token.startsWith("1 ") -> {
                     val fields = token.split(' ', limit = 9)
                     if (fields.size == 9) {
+                        val (indexChar, worktreeChar) = statusChars(fields)
                         entries += StatusEntry(
                             path = fields[8],
                             origPath = null,
-                            index = fields[1].getOrElse(0) { ' ' },
-                            worktree = fields[1].getOrElse(1) { ' ' },
+                            index = indexChar,
+                            worktree = worktreeChar,
                             kind = StatusKind.ORDINARY,
                         )
                     }
@@ -135,11 +136,12 @@ internal object GitParsers {
                     val originalPath = tokens.getOrNull(index + 1)
                     if (fields.size == 10 && originalPath != null) {
                         index += 1
+                        val (indexChar, worktreeChar) = statusChars(fields)
                         entries += StatusEntry(
                             path = fields[9],
                             origPath = originalPath,
-                            index = fields[1].getOrElse(0) { ' ' },
-                            worktree = fields[1].getOrElse(1) { ' ' },
+                            index = indexChar,
+                            worktree = worktreeChar,
                             kind = StatusKind.RENAMED,
                         )
                     }
@@ -147,11 +149,12 @@ internal object GitParsers {
                 token.startsWith("u ") -> {
                     val fields = token.split(' ', limit = 11)
                     if (fields.size == 11) {
+                        val (indexChar, worktreeChar) = statusChars(fields)
                         entries += StatusEntry(
                             path = fields[10],
                             origPath = null,
-                            index = fields[1].getOrElse(0) { ' ' },
-                            worktree = fields[1].getOrElse(1) { ' ' },
+                            index = indexChar,
+                            worktree = worktreeChar,
                             kind = StatusKind.UNMERGED,
                         )
                     }
@@ -296,6 +299,15 @@ internal object GitParsers {
             )
         }
     }
+
+    private fun statusChars(fields: List<String>): Pair<Char, Char> {
+        val xy = fields[1]
+        return normalizeStatusChar(xy.getOrElse(0) { ' ' }) to
+            normalizeStatusChar(xy.getOrElse(1) { ' ' })
+    }
+
+    // Porcelain v2 uses '.' for unchanged; StatusEntry uses ' ' uniformly.
+    private fun normalizeStatusChar(value: Char): Char = if (value == '.') ' ' else value
 
     private fun isObjectId(value: String): Boolean =
         (value.length == 40 || value.length == 64) && value.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }

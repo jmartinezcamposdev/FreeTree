@@ -39,11 +39,11 @@ class CliGitBackendWritesTest {
         assertOk(backend.stage(listOf("a.txt")))
         var entry = backend.status().entries.single { it.path == "a.txt" }
         assertEquals('M', entry.index)
-        assertEquals('.', entry.worktree)
+        assertEquals(' ', entry.worktree)
 
         assertOk(backend.unstage(listOf("a.txt")))
         entry = backend.status().entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('M', entry.worktree)
         assertEquals("two\n", Files.readString(repo.root.resolve("a.txt")))
     }
@@ -57,11 +57,11 @@ class CliGitBackendWritesTest {
         assertOk(backend.stage(listOf("a.txt")))
         var entry = backend.status().entries.single { it.path == "a.txt" }
         assertEquals('D', entry.index)
-        assertEquals('.', entry.worktree)
+        assertEquals(' ', entry.worktree)
 
         assertOk(backend.unstage(listOf("a.txt")))
         entry = backend.status().entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('D', entry.worktree)
     }
 
@@ -91,6 +91,62 @@ class CliGitBackendWritesTest {
     }
 
     @Test
+    fun unstageStagedNewFileWithUnstagedChangesInUnbornRepository() = runBlocking {
+        val unborn = GitTestRepo.create()
+        val unbornBackend = CliGitBackend.open(unborn.root, unborn.gitExecutable)
+        try {
+            unborn.write("new.txt", "staged\n")
+            assertOk(unbornBackend.stage(listOf("new.txt")))
+            unborn.write("new.txt", "staged\nworktree\n")
+
+            assertOk(unbornBackend.unstage(listOf("new.txt")))
+
+            val entry = unbornBackend.status().entries.single()
+            assertEquals(StatusKind.UNTRACKED, entry.kind)
+            assertEquals("staged\nworktree\n", Files.readString(unborn.root.resolve("new.txt")))
+            assertTrue(unborn.git("ls-files").isBlank())
+        } finally {
+            unborn.close()
+        }
+    }
+
+    @Test
+    fun unstageStagedNewFileWithUnstagedChangesKeepsWorktree() = runBlocking {
+        repo.write("base.txt", "base\n")
+        repo.commitAll("root")
+        repo.write("new.txt", "staged\n")
+        assertOk(backend.stage(listOf("new.txt")))
+        repo.write("new.txt", "staged\nworktree\n")
+
+        assertOk(backend.unstage(listOf("new.txt")))
+
+        val entry = backend.status().entries.single { it.path == "new.txt" }
+        assertEquals(StatusKind.UNTRACKED, entry.kind)
+        assertEquals("staged\nworktree\n", Files.readString(repo.root.resolve("new.txt")))
+        assertEquals("base.txt\n", repo.git("ls-files"))
+    }
+
+    @Test
+    fun discardStagedNewFileWithUnstagedChangesInUnbornRepository() = runBlocking {
+        val unborn = GitTestRepo.create()
+        val unbornBackend = CliGitBackend.open(unborn.root, unborn.gitExecutable)
+        try {
+            unborn.write("new.txt", "staged\n")
+            assertOk(unbornBackend.stage(listOf("new.txt")))
+            unborn.write("new.txt", "staged\nworktree\n")
+
+            assertOk(unbornBackend.discardStaged(listOf("new.txt")))
+
+            val entry = unbornBackend.status().entries.single()
+            assertEquals(StatusKind.UNTRACKED, entry.kind)
+            assertEquals("staged\nworktree\n", Files.readString(unborn.root.resolve("new.txt")))
+            assertTrue(unborn.git("ls-files").isBlank())
+        } finally {
+            unborn.close()
+        }
+    }
+
+    @Test
     fun stageRenamePassesBothPaths() = runBlocking {
         val lines = (1..20).joinToString("\n") { "line $it" } + "\n"
         repo.write("old.txt", lines)
@@ -103,7 +159,7 @@ class CliGitBackendWritesTest {
         val renamed = entries.single { it.kind == StatusKind.RENAMED }
         assertEquals("new.txt", renamed.path)
         assertEquals("old.txt", renamed.origPath)
-        assertEquals('.', renamed.worktree)
+        assertEquals(' ', renamed.worktree)
         assertTrue(entries.none { it.path == "old.txt" })
     }
 
@@ -116,7 +172,7 @@ class CliGitBackendWritesTest {
         assertOk(backend.unstage(listOf("new.txt")))
 
         val entries = backend.status().entries.associateBy { it.path }
-        assertEquals('.', entries.getValue("old.txt").index)
+        assertEquals(' ', entries.getValue("old.txt").index)
         assertEquals('D', entries.getValue("old.txt").worktree)
         assertEquals(StatusKind.UNTRACKED, entries.getValue("new.txt").kind)
         assertEquals("old.txt\n", repo.git("ls-files"))
@@ -154,7 +210,7 @@ class CliGitBackendWritesTest {
         assertOk(backend.discardStaged(listOf("a.txt")))
 
         val entry = backend.status().entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('M', entry.worktree)
         assertEquals("two\n", Files.readString(repo.root.resolve("a.txt")))
         assertEquals("one\n", repo.git("show", "HEAD:a.txt"))
@@ -177,6 +233,59 @@ class CliGitBackendWritesTest {
     }
 
     @Test
+    fun discardStagedNewFileWithUnstagedChangesKeepsTheWorktree() = runBlocking {
+        repo.write("base.txt", "base\n")
+        repo.commitAll("root")
+        repo.write("new.txt", "staged\n")
+        assertOk(backend.stage(listOf("new.txt")))
+        repo.write("new.txt", "staged\nworktree\n")
+
+        assertOk(backend.discardStaged(listOf("new.txt")))
+
+        val entry = backend.status().entries.single { it.path == "new.txt" }
+        assertEquals(StatusKind.UNTRACKED, entry.kind)
+        assertEquals("staged\nworktree\n", Files.readString(repo.root.resolve("new.txt")))
+        assertEquals("base.txt\n", repo.git("ls-files"))
+    }
+
+    @Test
+    fun discardStagedNewFileDeletedFromDiskRemovesTheIndexEntry() = runBlocking {
+        repo.write("base.txt", "base\n")
+        repo.commitAll("root")
+        repo.write("new.txt", "staged\n")
+        assertOk(backend.stage(listOf("new.txt")))
+        repo.delete("new.txt")
+
+        assertOk(backend.discardStaged(listOf("new.txt")))
+
+        assertTrue(backend.status().entries.isEmpty())
+        assertFalse(Files.exists(repo.root.resolve("new.txt")))
+        assertEquals("base.txt\n", repo.git("ls-files"))
+    }
+
+    @Test
+    fun discardStagedRenameWithUnstagedChangesRestoresTheOldPath() = runBlocking {
+        val lines = (1..20).joinToString("\n") { "line $it" } + "\n"
+        repo.write("old.txt", lines)
+        repo.commitAll("root")
+        repo.git("mv", "old.txt", "new.txt")
+        repo.write("new.txt", lines.replace("line 10", "line 10 changed"))
+
+        assertOk(backend.discardStaged(listOf("new.txt")))
+
+        assertEquals("old.txt\n", repo.git("ls-files"))
+        assertEquals(lines, repo.git("show", ":old.txt"))
+        assertFalse(Files.exists(repo.root.resolve("old.txt")))
+        assertEquals(
+            lines.replace("line 10", "line 10 changed"),
+            Files.readString(repo.root.resolve("new.txt")),
+        )
+        val entries = backend.status().entries.associateBy { it.path }
+        assertEquals('D', entries.getValue("old.txt").worktree)
+        assertEquals(StatusKind.UNTRACKED, entries.getValue("new.txt").kind)
+    }
+
+    @Test
     fun discardStagedRenameRestoresOldPathAndRemovesNewIndexEntry() = runBlocking {
         repo.write("old.txt", "one\n")
         repo.commitAll("root")
@@ -185,7 +294,7 @@ class CliGitBackendWritesTest {
         assertOk(backend.discardStaged(listOf("new.txt")))
 
         val entries = backend.status().entries.associateBy { it.path }
-        assertEquals('.', entries.getValue("old.txt").index)
+        assertEquals(' ', entries.getValue("old.txt").index)
         assertEquals('D', entries.getValue("old.txt").worktree)
         assertEquals(StatusKind.UNTRACKED, entries.getValue("new.txt").kind)
         assertTrue(Files.exists(repo.root.resolve("new.txt")))
@@ -203,7 +312,7 @@ class CliGitBackendWritesTest {
         assertOk(backend.discardStaged(listOf("a.txt")))
 
         val entry = backend.status().entries.single { it.path == "a.txt" }
-        assertEquals('.', entry.index)
+        assertEquals(' ', entry.index)
         assertEquals('D', entry.worktree)
         assertFalse(Files.exists(repo.root.resolve("a.txt")))
     }
@@ -221,7 +330,7 @@ class CliGitBackendWritesTest {
         assertEquals("two\n", Files.readString(repo.root.resolve("a.txt")))
         val entry = backend.status().entries.single { it.path == "a.txt" }
         assertEquals('M', entry.index)
-        assertEquals('.', entry.worktree)
+        assertEquals(' ', entry.worktree)
         assertEquals("two\n", repo.git("show", ":a.txt"))
     }
 

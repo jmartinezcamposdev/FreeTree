@@ -150,7 +150,7 @@ class CliGitBackend private constructor(
             return GitResult.Failure(e.exitCode, e.stderr)
         }
         val args = if (unborn) {
-            listOf("rm", "--cached", "--") + expanded
+            rmCachedArgs(expanded)
         } else {
             listOf("restore", "--staged", "--") + expanded
         }
@@ -183,7 +183,7 @@ class CliGitBackend private constructor(
             if (restore is GitResult.Failure) return restore
         }
         if (removePaths.isNotEmpty()) {
-            val remove = runWrite(listOf("rm", "--cached", "--") + removePaths, GitCommandType.LOCAL_WRITE)
+            val remove = runWrite(rmCachedArgs(removePaths), GitCommandType.LOCAL_WRITE)
             if (remove is GitResult.Failure) return remove
         }
         return GitResult.Ok("")
@@ -269,6 +269,11 @@ class CliGitBackend private constructor(
             listOf("ls-tree", "-r", "-z", "--name-only", "HEAD", "--") + candidates,
         )
         return output.split('\u0000').filter { it.isNotEmpty() }.toSet()
+    }
+
+    private fun rmCachedArgs(paths: List<String>): List<String> {
+        // --cached is index-only; -f bypasses git rm's work-tree safety check.
+        return listOf("rm", "--cached", "-f", "--") + paths
     }
 
     private fun expandRenamePaths(paths: List<String>, entries: List<StatusEntry>): List<String> {

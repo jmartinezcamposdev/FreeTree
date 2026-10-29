@@ -193,6 +193,57 @@ class CliGitBackendIntegrationTest {
     }
 
     @Test
+    fun changedFilesMatchShowNameStatusOracle() = runBlocking {
+        val lines = (1..20).joinToString("\n") { "line $it" } + "\n"
+        repo.write("rename old.txt", lines)
+        repo.write("delete.txt", "delete\n")
+        repo.write("modify.txt", "before\n")
+        repo.write("unchanged.txt", "same\n")
+        val root = repo.commitAll("root")
+
+        Files.move(repo.root.resolve("rename old.txt"), repo.root.resolve("rename new.txt"))
+        repo.write("rename new.txt", lines.replace("line 5", "line 5 changed"))
+        repo.delete("delete.txt")
+        repo.write("modify.txt", "after\n")
+        repo.write("added.txt", "added\n")
+        repo.git("add", "-A")
+        repo.git("commit", "-q", "-m", "changes")
+        val hash = repo.head()
+
+        val expected = parseNameStatusOracle(
+            repo.git("show", "--name-status", "--format=", "-M", "--first-parent", "-z", hash).split('\u0000'),
+        )
+        val actual = backend.changedFiles(hash)
+            .map { Triple(it.status, it.path, it.oldPath) }
+            .toSet()
+        assertEquals(expected, actual)
+
+        val rootExpected = parseNameStatusOracle(
+            repo.git("show", "--name-status", "--format=", "-M", "--first-parent", "-z", root).split('\u0000'),
+        )
+        val rootActual = backend.changedFiles(root)
+            .map { Triple(it.status, it.path, it.oldPath) }
+            .toSet()
+        assertEquals(rootExpected, rootActual)
+    }
+
+    @Test
+    fun diffUnstagedAndStagedRenamePassBothPaths() = runBlocking {
+        val lines = (1..20).joinToString("\n") { "line $it" } + "\n"
+        repo.write("old.txt", lines)
+        repo.commitAll("root")
+        repo.git("mv", "old.txt", "new.txt")
+        repo.write("new.txt", lines.replace("line 10", "line 10 changed"))
+
+        val unstaged = backend.diff(DiffTarget.Unstaged("new.txt"))
+        assertTrue(unstaged.lines.any { it.kind == DiffLineKind.ADD && it.text == "line 10 changed" })
+
+        val staged = backend.diff(DiffTarget.Staged("new.txt"))
+        assertTrue(staged.lines.any { it.kind == DiffLineKind.FILE_HEADER && it.text.contains("old.txt") })
+        assertTrue(staged.lines.any { it.kind == DiffLineKind.FILE_HEADER && it.text.contains("new.txt") })
+    }
+
+    @Test
     fun sha256RepositoryComputesItsOwnEmptyTree() = runBlocking {
         val sha256 = GitTestRepo.create(objectFormat = "sha256")
         try {
@@ -214,7 +265,8 @@ class CliGitBackendIntegrationTest {
     }
 
     @Test
-    fun mergeChangedFilesUseFirstParent() = runBlocking {        repo.write("a.txt", "a\n")
+    fun mergeChangedFilesUseFirstParent() = runBlocking {
+        repo.write("a.txt", "a\n")
         repo.commitAll("root")
         repo.git("checkout", "-q", "-b", "feature")
         repo.write("feature.txt", "feature\n")
@@ -252,7 +304,7 @@ class CliGitBackendIntegrationTest {
         val status = backend.status()
         assertFalse(status.unborn)
         assertEquals(repo.head(), status.branchHead)
-        assertEquals(v1Entries(repo), status.entries.map { it.path to "${it.index}${it.worktree}".replace('.', ' ') }.toSet())
+        assertEquals(v1Entries(repo), status.entries.map { it.path to "${it.index}${it.worktree}" }.toSet())
 
         val rename = status.entries.single { it.kind == StatusKind.RENAMED }
         assertEquals("status new.txt", rename.path)
@@ -402,6 +454,30 @@ class CliGitBackendIntegrationTest {
                 paths.sorted(Comparator.reverseOrder()).forEach { Files.deleteIfExists(it) }
             }
         }
+    }
+
+    private fun parseNameStatusOracle(tokens: List<String>): Set<Triple<Char, String, String?>> {
+        val result = mutableSetOf<Triple<Char, String, String?>>()
+        var index = 0
+        while (index < tokens.size) {
+            val token = tokens[index]
+            if (token.isEmpty()) {
+                index += 1
+                continue
+            }
+            val status = token.first()
+            if (status == 'R' || status == 'C') {
+                val oldPath = tokens.getOrNull(index + 1) ?: break
+                val newPath = tokens.getOrNull(index + 2) ?: break
+                result += Triple(status, newPath, oldPath)
+                index += 3
+            } else {
+                val path = tokens.getOrNull(index + 1) ?: break
+                result += Triple(status, path, null)
+                index += 2
+            }
+        }
+        return result
     }
 
     private fun v1Entries(repo: GitTestRepo): Set<Pair<String, String>> {

@@ -48,6 +48,20 @@ class GitRunnerTest {
     }
 
     @Test
+    fun passesUnicodeAndNewlineArgumentsWithoutShellParsing() = runBlocking {
+        val script = script("printf '%s\\n' \"\$@\"")
+        val argument = "path ünïcode\nline\ttab"
+
+        val result = runner(script).run(listOf("diff", argument))
+
+        assertTrue(result.succeeded)
+        assertEquals(
+            "--no-pager\n-c\ncore.quotepath=off\ndiff\n$argument\n",
+            result.stdoutText(),
+        )
+    }
+
+    @Test
     fun setsPromptsAndLockEnvironmentPerCommandType() = runBlocking {
         val script = script(
             "printf '%s|%s|%s|%s' \"\$GIT_TERMINAL_PROMPT\" \"\$GCM_INTERACTIVE\" " +
@@ -57,6 +71,38 @@ class GitRunnerTest {
 
         assertEquals("0|never|1|0", git.run(listOf("status"), GitCommandType.READ).stdoutText())
         assertEquals("0|never|1|", git.run(listOf("add", "x"), GitCommandType.LOCAL_WRITE).stdoutText())
+        assertEquals("0|never|1|", git.run(listOf("push"), GitCommandType.NETWORK).stdoutText())
+    }
+
+    @Test
+    fun usesDocumentedDefaultTimeouts() {
+        val timeouts = GitTimeouts()
+
+        assertEquals(60_000, timeouts.readMillis)
+        assertEquals(120_000, timeouts.localWriteMillis)
+        assertEquals(300_000, timeouts.networkMillis)
+    }
+
+    @Test
+    fun preservesGitStderrOnFailure() = runBlocking {
+        val script = script("echo 'fatal: nope' >&2\nexit 7")
+
+        val result = runner(script).run(listOf("status"))
+
+        assertFalse(result.succeeded)
+        assertEquals(7, result.exitCode)
+        assertEquals("fatal: nope\n", result.stderr)
+    }
+
+    @Test
+    fun writesLargeInputWhileDrainingLargeOutput() = runBlocking {
+        val script = script("dd if=/dev/zero bs=1024 count=1024 2>/dev/null\ncat >/dev/null")
+        val input = ByteArray(1024 * 1024)
+
+        val result = runner(script, GitTimeouts(readMillis = 10_000)).run(listOf("log"), stdin = input)
+
+        assertTrue(result.succeeded, result.stderr)
+        assertEquals(input.size, result.stdout.size)
     }
 
     @Test
@@ -80,6 +126,59 @@ class GitRunnerTest {
         assertEquals(-1, result.exitCode)
         assertTrue(result.stderr.contains("timed out after 200 ms"), result.stderr)
         assertTrue((System.nanoTime() - started) < 5_000_000_000L)
+    }
+
+    @Test
+    fun timeoutKillsTheProcessAndItsDescendants() = runBlocking {
+        val script = script(
+            """
+            sleep 30 &
+            child=${'$'}!
+            echo "${'$'}child" > child.pid
+            echo "${'$'}${'$'}" > parent.pid
+            wait
+            """.trimIndent(),
+        )
+        val deferred = async {
+            runner(script, GitTimeouts(readMillis = 1_000)).run(listOf("status"))
+        }
+        assertTrue(waitForFile(workDir.resolve("child.pid")))
+        assertTrue(waitForFile(workDir.resolve("parent.pid")))
+        val childPid = Files.readString(workDir.resolve("child.pid")).trim().toLong()
+        val parentPid = Files.readString(workDir.resolve("parent.pid")).trim().toLong()
+
+        val result = deferred.await()
+
+        assertTrue(result.timedOut)
+        assertEquals(-1, result.exitCode)
+        assertTrue(waitUntilGone(childPid), "child process $childPid is still alive")
+        assertTrue(waitUntilGone(parentPid), "parent process $parentPid is still alive")
+    }
+
+    @Test
+    fun truncationKillsTheProcessAndItsDescendants() = runBlocking {
+        val script = script(
+            """
+            sleep 30 &
+            echo "${'$'}!" > child.pid
+            echo "${'$'}${'$'}" > parent.pid
+            while true; do printf '0123456789abcdef'; done
+            """.trimIndent(),
+        )
+        val deferred = async {
+            runner(script).run(listOf("diff"), maxStdoutBytes = 1_024)
+        }
+        assertTrue(waitForFile(workDir.resolve("child.pid")))
+        assertTrue(waitForFile(workDir.resolve("parent.pid")))
+        val childPid = Files.readString(workDir.resolve("child.pid")).trim().toLong()
+        val parentPid = Files.readString(workDir.resolve("parent.pid")).trim().toLong()
+
+        val result = deferred.await()
+
+        assertTrue(result.truncated)
+        assertEquals(1_024, result.stdout.size)
+        assertTrue(waitUntilGone(childPid), "child process $childPid is still alive")
+        assertTrue(waitUntilGone(parentPid), "parent process $parentPid is still alive")
     }
 
     @Test
