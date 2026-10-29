@@ -171,7 +171,7 @@ private fun DiffLineRow(line: DiffLine) {
                 .padding(end = GraphStyle.SPACE_XS),
         )
         Text(
-            text = prefix + line.text,
+            text = prefix + truncateDiffLine(line.text),
             style = GraphStyle.monoTextStyle,
             color = colors.onSurface,
             maxLines = GraphStyle.MAX_TEXT_LINES,
@@ -180,3 +180,14 @@ private fun DiffLineRow(line: DiffLine) {
         )
     }
 }
+
+/**
+ * docs/11: very long diff lines are truncated on screen only; the full line stays in the model so
+ * "load full" and copy/selection never change the data.
+ */
+private fun truncateDiffLine(text: String): String =
+    if (text.length > GraphStyle.MAX_DIFF_LINE_CHARS) {
+        text.take(GraphStyle.MAX_DIFF_LINE_CHARS) + "…"
+    } else {
+        text
+    }

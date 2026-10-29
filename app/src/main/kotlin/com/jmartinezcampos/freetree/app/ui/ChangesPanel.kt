@@ -53,7 +53,8 @@ internal fun ChangesPanel(
             (it.kind == StatusKind.UNTRACKED || !isStatusBlank(it.worktree))
     }
     var message by remember(session?.id) { mutableStateOf("") }
-    var pendingDiscard by remember { mutableStateOf<StatusEntry?>(null) }
+    // Keyed by session too: switching tabs must not leave a confirmation for another repository.
+    var pendingDiscard by remember(session?.id) { mutableStateOf<StatusEntry?>(null) }
     val busy = state.busy != null
     val canCommit = message.isNotBlank() && staged.isNotEmpty() && conflicts.isEmpty() && !busy && session != null
 

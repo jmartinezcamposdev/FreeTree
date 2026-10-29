@@ -263,13 +263,12 @@ class GitRunnerTest {
             """
             case "${'$'}4" in
               rev-parse)
-                if [ "${'$'}5" = "--show-toplevel" ]; then
-                  echo "${'$'}PWD"
-                  echo "${'$'}PWD/.git"
-                  echo ".git"
-                else
-                  echo "0123456789012345678901234567890123456789"
-                fi
+                case "${'$'}5" in
+                  --show-toplevel) echo "${'$'}PWD" ;;
+                  --absolute-git-dir) echo "${'$'}PWD/.git" ;;
+                  --git-common-dir) echo ".git" ;;
+                  *) echo "0123456789012345678901234567890123456789" ;;
+                esac
                 ;;
               symbolic-ref)
                 echo main

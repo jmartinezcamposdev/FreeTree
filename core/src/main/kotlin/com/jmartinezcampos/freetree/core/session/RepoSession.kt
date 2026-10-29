@@ -286,6 +286,8 @@ class RepoSession(
                     throw e
                 } catch (e: Throwable) {
                     reportDiffError(context.activation, sequence, e)
+                    // The path may have changed on disk; bring the changes panel back in sync.
+                    refreshStatus(context.activation)
                     return@launch
                 }
                 if (!isCurrentDiff(context.activation, sequence)) return@launch
