@@ -64,7 +64,7 @@ class ChangesPanelUiTest {
                     fixture.manager.activeSession.value?.state?.value?.status != null
                 }
 
-                onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changes (5)")
+                onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changed files (5)")
                 onNodeWithTag(UiTestTags.CONFLICTS_SECTION).assertExists()
                 onNodeWithTag(UiTestTags.STAGED_SECTION).assertExists()
                 onNodeWithTag(UiTestTags.UNSTAGED_SECTION).assertExists()

@@ -35,6 +35,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -45,6 +46,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.Canvas
@@ -216,6 +218,7 @@ internal fun GraphList(
         }
         val headHash = state.head?.commit?.takeIf { state.showHead }
         val showHead = showHeadHighlight(state.head, state.labelsByCommit, state.showHead)
+        val workingLane = if (graph.rowCount > 0) graph.nodeLane(0) else 0
 
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -228,6 +231,10 @@ internal fun GraphList(
                     ChangesGraphRow(
                         changeCount = state.status?.entries?.size ?: 0,
                         selected = state.selection is Selection.WorkingTree,
+                        laneWidth = GraphStyle.LANE_WIDTH * visibleLanes.toFloat(),
+                        workingLane = workingLane,
+                        laneOffset = laneOffset,
+                        connectToCommit = graph.rowCount > 0,
                         onClick = { session?.selectWorkingTree() },
                     )
                 }
@@ -253,6 +260,7 @@ internal fun GraphList(
                         isHead = hash == headHash && showHead,
                         isSelected = state.selection is Selection.Commit &&
                             (state.selection as Selection.Commit).hash == hash,
+                        connectToWorkingTree = row == 0,
                         visibleLanes = visibleLanes,
                         laneOffset = laneOffset,
                         onClick = { session?.selectCommit(hash) },
@@ -273,6 +281,10 @@ internal fun GraphList(
 private fun ChangesGraphRow(
     changeCount: Int,
     selected: Boolean,
+    laneWidth: androidx.compose.ui.unit.Dp,
+    workingLane: Int,
+    laneOffset: Int,
+    connectToCommit: Boolean,
     onClick: () -> Unit,
 ) {
     val colors = LocalGraphColors.current
@@ -287,16 +299,57 @@ private fun ChangesGraphRow(
             .padding(horizontal = GraphStyle.GRAPH_ROW_PADDING),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "○",
-            color = colors.primary,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(GraphStyle.LANE_WIDTH),
+        WorkingTreeLane(
+            laneWidth = laneWidth,
+            workingLane = workingLane,
+            laneOffset = laneOffset,
+            connectToCommit = connectToCommit,
         )
         Text(
-            text = "Changes ($changeCount)",
-            style = MaterialTheme.typography.titleSmall,
+            text = if (changeCount == 0) "No changed files" else "Changed files ($changeCount)",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
             color = colors.onSurface,
+            modifier = Modifier
+                .weight(GraphStyle.FILL_WEIGHT)
+                .padding(horizontal = GraphStyle.SPACE_SM),
+        )
+    }
+}
+
+@Composable
+private fun WorkingTreeLane(
+    laneWidth: androidx.compose.ui.unit.Dp,
+    workingLane: Int,
+    laneOffset: Int,
+    connectToCommit: Boolean,
+) {
+    val colors = LocalGraphColors.current
+    Canvas(
+        modifier = Modifier
+            .width(laneWidth)
+            .fillMaxHeight(),
+    ) {
+        val dash = GraphStyle.WORKING_TREE_DASH_ON.toPx()
+        val gap = GraphStyle.WORKING_TREE_DASH_OFF.toPx()
+        val lane = GraphStyle.LANE_WIDTH.toPx()
+        val centerX = (workingLane - laneOffset) * lane + lane / GraphStyle.CENTER_FACTOR
+        val centerY = size.height / GraphStyle.CENTER_FACTOR
+        val radius = GraphStyle.NODE_RADIUS.toPx()
+        if (connectToCommit) {
+            drawLine(
+                color = colors.onSurfaceMuted,
+                start = Offset(centerX, centerY + radius + GraphStyle.WORKING_TREE_BALL_GAP.toPx()),
+                end = Offset(centerX, size.height),
+                strokeWidth = GraphStyle.STROKE_WIDTH.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, gap)),
+            )
+        }
+        drawCircle(
+            color = colors.primary,
+            radius = radius,
+            center = Offset(centerX, centerY),
+            style = Stroke(width = GraphStyle.STROKE_WIDTH.toPx()),
         )
     }
 }
@@ -308,6 +361,7 @@ private fun CommitGraphRow(
     refs: List<GitRef>,
     isHead: Boolean,
     isSelected: Boolean,
+    connectToWorkingTree: Boolean,
     visibleLanes: Int,
     laneOffset: Int,
     onClick: () -> Unit,
@@ -333,6 +387,7 @@ private fun CommitGraphRow(
                 laneWidth = laneWidth,
                 laneOffset = laneOffset,
                 isHead = isHead,
+                connectToWorkingTree = connectToWorkingTree,
             )
             Text(
                 text = graph.subject(row),
@@ -373,6 +428,7 @@ private fun LaneCanvas(
     laneWidth: androidx.compose.ui.unit.Dp,
     laneOffset: Int,
     isHead: Boolean,
+    connectToWorkingTree: Boolean,
 ) {
     val colors = LocalGraphColors.current
     val density = LocalDensity.current
@@ -446,6 +502,23 @@ private fun LaneCanvas(
         val nodeX = x(nodeLane)
         val nodeY = halfHeight
         val radius = GraphStyle.NODE_RADIUS.toPx()
+        if (connectToWorkingTree) {
+            val endY = nodeY - radius - GraphStyle.WORKING_TREE_BALL_GAP.toPx()
+            if (endY > 0f) {
+                drawLine(
+                    color = colors.onSurfaceMuted,
+                    start = Offset(nodeX, 0f),
+                    end = Offset(nodeX, endY),
+                    strokeWidth = GraphStyle.STROKE_WIDTH.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(
+                        floatArrayOf(
+                            GraphStyle.WORKING_TREE_DASH_ON.toPx(),
+                            GraphStyle.WORKING_TREE_DASH_OFF.toPx(),
+                        ),
+                    ),
+                )
+            }
+        }
         if (isHead) {
             drawCircle(
                 color = colors.headHalo,

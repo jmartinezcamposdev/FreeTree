@@ -53,7 +53,7 @@ class GraphListUiTest {
                 fixture.manager.activeSession.value?.state?.value?.graph != null
             }
 
-            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changes (3)")
+            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changed files (3)")
             onNodeWithTag(UiTestTags.commitRow(0)).assertExists()
             onNodeWithTag(UiTestTags.commitRowForHash(commits[0].hash)).assertExists()
             val firstSubject = fixture.manager.activeSession.value!!.state.value.graph!!.subject(0)
@@ -73,6 +73,28 @@ class GraphListUiTest {
                 }
             }
             onNodeWithText("HEAD").assertExists()
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
+    fun changesRowShowsNoChangedFilesWhenClean() = runDesktopComposeUiTest(width = 1200, height = 800) {
+        val commits = RandomDag.generate(seed = 17, commitCount = 4)
+        val fixture = uiFixture(
+            commits = commits,
+            refs = listOf(
+                GitRef("refs/heads/main", "main", RefKind.LOCAL_BRANCH, commits[0].hash, true, null),
+            ),
+            head = HeadInfo(commits[0].hash, "main"),
+            status = WorkingStatus(commits[0].hash, null, 0, 0, false, emptyList()),
+        )
+        try {
+            setContent { App(fixture.manager) }
+            waitUntil(timeoutMillis = 5_000) {
+                fixture.manager.activeSession.value?.state?.value?.graph != null
+            }
+            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("No changed files")
         } finally {
             fixture.close()
         }

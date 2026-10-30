@@ -145,6 +145,9 @@ object GraphStyle {
     val MIN_DETAIL_PANE_WIDTH: Dp = 320.dp
     val MIN_FILES_PANE_HEIGHT: Dp = 100.dp
     val MIN_DIFF_PANE_HEIGHT: Dp = 120.dp
+    val WORKING_TREE_DASH_ON: Dp = 4.dp
+    val WORKING_TREE_DASH_OFF: Dp = 3.dp
+    val WORKING_TREE_BALL_GAP: Dp = 2.dp
     const val COMMIT_FILES_FRACTION: Float = 0.5f
     const val CHANGES_FILES_FRACTION: Float = 0.5f
 
