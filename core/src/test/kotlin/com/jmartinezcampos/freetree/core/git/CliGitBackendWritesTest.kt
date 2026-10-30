@@ -474,12 +474,12 @@ class CliGitBackendWritesTest {
             GitTestRepo.addOrigin(repo, bare)
             GitTestRepo.addOrigin(other, bare)
 
-            val noUpstream = backend.push()
-            assertTrue(noUpstream is GitResult.Failure)
-            assertTrue(noUpstream.stderr.isNotBlank())
-
-            repo.git("push", "-q", "-u", "origin", "main")
-            assertOk(backend.push())
+            val push = backend.push()
+            assertOk(push)
+            assertEquals(
+                "origin/main",
+                repo.git("rev-parse", "--abbrev-ref", "@{upstream}").trim(),
+            )
             assertEquals(repo.head(), bare.revParse("refs/heads/main"))
 
             repo.write("a.txt", "two\n")

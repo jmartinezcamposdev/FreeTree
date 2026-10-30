@@ -237,7 +237,36 @@ class CliGitBackend private constructor(
         )
     }
 
-    override suspend fun push(): GitResult = runWrite(listOf("push"), GitCommandType.NETWORK)
+    override suspend fun push(): GitResult {
+        val branch = currentBranch()
+        if (branch != null && upstreamBranch() == null) {
+            return runWrite(
+                listOf("push", "--set-upstream", "origin", branch),
+                GitCommandType.NETWORK,
+            )
+        }
+        return runWrite(listOf("push"), GitCommandType.NETWORK)
+    }
+
+    private suspend fun currentBranch(): String? {
+        val result = runner.run(listOf("symbolic-ref", "-q", "--short", "HEAD"))
+        return when {
+            result.succeeded -> result.stdoutText().trim().ifBlank { null }
+            result.exitCode == 1 -> null
+            else -> throw GitException(result.exitCode, result.stderr)
+        }
+    }
+
+    private suspend fun upstreamBranch(): String? {
+        val result = runner.run(
+            listOf("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"),
+        )
+        return when {
+            result.succeeded -> result.stdoutText().trim().ifBlank { null }
+            result.exitCode == 1 || result.exitCode == 128 -> null
+            else -> throw GitException(result.exitCode, result.stderr)
+        }
+    }
 
     override suspend fun pull(): GitResult = runWrite(
         listOf("pull", "--no-edit"),

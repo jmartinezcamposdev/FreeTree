@@ -41,7 +41,6 @@ class RealAppAcceptanceTest {
                 repo.writeFile("README.md", "line one\n")
                 repo.commitAll("Initial commit")
                 val origin = repo.createBareOrigin()
-                repo.git("push", "-u", "origin", "main").requireSuccess()
                 repo.writeFile("src/App.kt", "fun main() = Unit\n")
                 val appCommit = repo.commitAll("Add app")
                 repo.writeFile("README.md", "line one\nlocal change\n")
@@ -123,11 +122,13 @@ class RealAppAcceptanceTest {
 
                 onNodeWithTag(UiTestTags.PUSH).performClick()
                 awaitCondition("push reaches the bare origin") {
-                    repo.gitIn(origin.path, "rev-parse", "refs/heads/main")
-                        .requireSuccess()
-                        .stdout
-                        .trim() == committedHead
+                    val result = repo.gitIn(origin.path, "rev-parse", "--verify", "-q", "refs/heads/main")
+                    result.succeeded && result.stdout.trim() == committedHead
                 }
+                assertEquals(
+                    "origin/main",
+                    repo.gitOk("rev-parse", "--abbrev-ref", "@{upstream}"),
+                )
 
                 val remoteHead = GitTestRepo.clone(origin).use { other ->
                     other.commitFile("remote.txt", "remote\n", "Remote advance")

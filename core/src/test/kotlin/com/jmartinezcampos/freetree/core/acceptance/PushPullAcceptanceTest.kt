@@ -26,20 +26,24 @@ class PushPullAcceptanceTest {
     }
 
     @Test
-    fun missingUpstreamFailsPushAndPullWithGitStderrAndNoHang() = runBlocking {
+    fun missingUpstreamPushSetsOriginUpstreamAndThenPulls() = runBlocking {
         repo.commitFile("a.txt", "a\n", "root")
-        repo.createBareOrigin()
+        val origin = repo.createBareOrigin()
 
-        val expectedPush = repo.git("push")
         val push = timed { backend.push() }
-        assertFailure(push.value)
-        assertEquals(expectedPush.stderr, (push.value as GitResult.Failure).stderr)
+        assertOk(push.value)
         assertTrue(push.elapsedMillis < NETWORK_TIMEOUT_MILLIS)
+        assertEquals(
+            "origin/main",
+            repo.git("rev-parse", "--abbrev-ref", "@{upstream}").requireSuccess().stdout.trim(),
+        )
+        assertEquals(
+            repo.headHash(),
+            repo.gitIn(origin.path, "rev-parse", "refs/heads/main").requireSuccess().stdout.trim(),
+        )
 
-        val expectedPull = repo.git("pull", "--no-edit")
         val pull = timed { backend.pull() }
-        assertFailure(pull.value)
-        assertEquals(expectedPull.stderr, (pull.value as GitResult.Failure).stderr)
+        assertOk(pull.value)
         assertTrue(pull.elapsedMillis < NETWORK_TIMEOUT_MILLIS)
     }
 
