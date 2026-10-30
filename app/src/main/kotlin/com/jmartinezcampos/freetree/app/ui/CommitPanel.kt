@@ -36,6 +36,7 @@ internal fun CommitPanel(
 ) {
     val colors = LocalGraphColors.current
     val detail = state.commitDetail
+    val filesScrollState = rememberScrollState()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -129,19 +130,31 @@ internal fun CommitPanel(
             color = colors.onSurfaceMuted,
             modifier = Modifier.padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XS),
         )
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(GraphStyle.FILL_WEIGHT)
-                .verticalScroll(rememberScrollState()),
+                .weight(GraphStyle.FILL_WEIGHT),
         ) {
-            state.changedFiles.forEach { change ->
-                ChangedFileRow(
-                    change = change,
-                    selected = state.openDiffTarget == DiffTarget.InCommit(detail.hash, change),
-                    onClick = { session?.openDiff(DiffTarget.InCommit(detail.hash, change)) },
-                )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = GraphStyle.SCROLLBAR_GUTTER)
+                    .verticalScroll(filesScrollState),
+            ) {
+                state.changedFiles.forEach { change ->
+                    ChangedFileRow(
+                        change = change,
+                        selected = state.openDiffTarget == DiffTarget.InCommit(detail.hash, change),
+                        onClick = { session?.openDiff(DiffTarget.InCommit(detail.hash, change)) },
+                    )
+                }
             }
+            ModernScrollbar(
+                scrollState = filesScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd),
+                alwaysVisible = false,
+                testTag = UiTestTags.COMMIT_FILES_SCROLLBAR,
+            )
         }
 
         val target = state.openDiffTarget

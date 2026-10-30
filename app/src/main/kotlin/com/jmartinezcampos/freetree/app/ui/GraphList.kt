@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,6 +57,7 @@ import com.jmartinezcampos.freetree.core.session.LoadState
 import com.jmartinezcampos.freetree.core.session.RepoSession
 import com.jmartinezcampos.freetree.core.session.RepoUiState
 import com.jmartinezcampos.freetree.core.session.Selection
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun GraphList(
@@ -67,17 +69,13 @@ internal fun GraphList(
     val graph = state.graph
     val listState = rememberLazyListState()
     val focusRequester = remember { FocusRequester() }
+    val coroutineScope = rememberCoroutineScope()
     val selectedCommitRow = when (val selection = state.selection) {
         is Selection.Commit -> graph?.indexOfHash(selection.hash)?.takeIf { it >= 0 } ?: -1
         else -> -1
     }
 
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
-    LaunchedEffect(selectedCommitRow, graph) {
-        if (graph == null || selectedCommitRow < 0) return@LaunchedEffect
-        listState.scrollToItem(selectedCommitRow + 1)
-    }
 
     LaunchedEffect(listState, session, graph) {
         if (session == null || graph == null) return@LaunchedEffect
@@ -99,10 +97,27 @@ internal fun GraphList(
         }
     }
 
+    /**
+     * Keyboard navigation is the only interaction allowed to move the viewport. Clicks and parent
+     * links must leave the graph exactly where the user scrolled it.
+     */
+    fun revealRow(itemIndex: Int) {
+        val layout = listState.layoutInfo
+        if (layout.visibleItemsInfo.isEmpty()) return
+        val item = layout.visibleItemsInfo.firstOrNull { it.index == itemIndex }
+        val fullyVisible = item != null &&
+            item.offset >= layout.viewportStartOffset &&
+            item.offset + item.size <= layout.viewportEndOffset
+        if (!fullyVisible) {
+            coroutineScope.launch { listState.scrollToItem(itemIndex) }
+        }
+    }
+
     fun moveSelection(delta: Int) {
         if (graph == null) return
         if (graph.rowCount == 0) {
             session?.selectWorkingTree()
+            revealRow(0)
             return
         }
         val current = selectedCommitRow
@@ -113,8 +128,11 @@ internal fun GraphList(
         }
         if (target < 0) {
             session?.selectWorkingTree()
+            revealRow(0)
         } else {
-            selectRow(target.coerceAtMost(graph.rowCount - 1))
+            val row = target.coerceAtMost(graph.rowCount - 1)
+            selectRow(row)
+            revealRow(row + 1)
         }
     }
 
@@ -145,13 +163,16 @@ internal fun GraphList(
                     }
                     Key.MoveHome -> {
                         session?.selectWorkingTree()
+                        revealRow(0)
                         true
                     }
                     Key.MoveEnd -> {
                         if (graph.rowCount == 0) {
                             session?.selectWorkingTree()
+                            revealRow(0)
                         } else {
                             selectRow(graph.rowCount - 1)
+                            revealRow(graph.rowCount)
                         }
                         true
                     }
@@ -195,44 +216,54 @@ internal fun GraphList(
         }
         val headHash = state.head?.commit?.takeIf { state.showHead }
 
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            item(key = "changes") {
-                ChangesGraphRow(
-                    changeCount = state.status?.entries?.size ?: 0,
-                    selected = state.selection is Selection.WorkingTree,
-                    onClick = { session?.selectWorkingTree() },
-                )
-            }
-            if (graph.rowCount == 0) {
-                item(key = "empty") {
-                    GraphEmptyState(
-                        message = if (state.refs.isEmpty()) "Repository is empty" else "No visible refs",
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(GraphStyle.SPACE_LG),
+        Box(Modifier.fillMaxSize()) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = GraphStyle.SCROLLBAR_GUTTER),
+            ) {
+                item(key = "changes") {
+                    ChangesGraphRow(
+                        changeCount = state.status?.entries?.size ?: 0,
+                        selected = state.selection is Selection.WorkingTree,
+                        onClick = { session?.selectWorkingTree() },
+                    )
+                }
+                if (graph.rowCount == 0) {
+                    item(key = "empty") {
+                        GraphEmptyState(
+                            message = if (state.refs.isEmpty()) "Repository is empty" else "No visible refs",
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(GraphStyle.SPACE_LG),
+                        )
+                    }
+                }
+                items(
+                    count = graph.rowCount,
+                    key = { index -> graph.hash(index) },
+                ) { row ->
+                    val hash = graph.hash(row)
+                    CommitGraphRow(
+                        graph = graph,
+                        row = row,
+                        refs = state.labelsByCommit[hash].orEmpty(),
+                        isHead = hash == headHash,
+                        isSelected = state.selection is Selection.Commit &&
+                            (state.selection as Selection.Commit).hash == hash,
+                        visibleLanes = visibleLanes,
+                        laneOffset = laneOffset,
+                        onClick = { session?.selectCommit(hash) },
                     )
                 }
             }
-            items(
-                count = graph.rowCount,
-                key = { index -> graph.hash(index) },
-            ) { row ->
-                val hash = graph.hash(row)
-                CommitGraphRow(
-                    graph = graph,
-                    row = row,
-                    refs = state.labelsByCommit[hash].orEmpty(),
-                    isHead = hash == headHash,
-                    isSelected = state.selection is Selection.Commit &&
-                        (state.selection as Selection.Commit).hash == hash,
-                    visibleLanes = visibleLanes,
-                    laneOffset = laneOffset,
-                    onClick = { session?.selectCommit(hash) },
-                )
-            }
+            ModernScrollbar(
+                listState = listState,
+                modifier = Modifier.align(Alignment.CenterEnd),
+                alwaysVisible = true,
+                testTag = UiTestTags.GRAPH_SCROLLBAR,
+            )
         }
     }
 }

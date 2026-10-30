@@ -3,6 +3,7 @@ package com.jmartinezcampos.freetree.app.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -55,6 +56,7 @@ internal fun ChangesPanel(
     var message by remember(session?.id) { mutableStateOf("") }
     // Keyed by session too: switching tabs must not leave a confirmation for another repository.
     var pendingDiscard by remember(session?.id) { mutableStateOf<StatusEntry?>(null) }
+    val changesScrollState = rememberScrollState()
     val busy = state.busy != null
     val canCommit = message.isNotBlank() && staged.isNotEmpty() && conflicts.isEmpty() && !busy && session != null
 
@@ -64,127 +66,139 @@ internal fun ChangesPanel(
             .background(colors.surface)
             .testTag(UiTestTags.CHANGES_PANEL),
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(GraphStyle.FILL_WEIGHT)
-                .verticalScroll(rememberScrollState()),
+                .weight(GraphStyle.FILL_WEIGHT),
         ) {
-            if (status == null) {
-                Text(
-                    text = "Loading working tree…",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceMuted,
-                    modifier = Modifier.padding(GraphStyle.SPACE_LG),
-                )
-            } else if (entries.isEmpty()) {
-                Text(
-                    text = "Working tree clean",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceMuted,
-                    modifier = Modifier.padding(GraphStyle.SPACE_LG),
-                )
-            }
-
-            if (conflicts.isNotEmpty()) {
-                ChangeSectionHeader(title = "Conflicts", count = conflicts.size, tag = UiTestTags.CONFLICTS_SECTION)
-                Text(
-                    text = "Resolve conflicts outside FreeTree. Conflict actions are disabled.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.error,
-                    modifier = Modifier.padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XS),
-                )
-                conflicts.forEach { entry ->
-                    ChangeFileRow(
-                        entry = entry,
-                        status = entry.index,
-                        tag = UiTestTags.conflictFile(entry.path),
-                        readOnly = true,
-                        onOpen = { session?.openDiff(DiffTarget.Unstaged(entry.path)) },
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = GraphStyle.SCROLLBAR_GUTTER)
+                    .verticalScroll(changesScrollState),
+            ) {
+                if (status == null) {
+                    Text(
+                        text = "Loading working tree…",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceMuted,
+                        modifier = Modifier.padding(GraphStyle.SPACE_LG),
+                    )
+                } else if (entries.isEmpty()) {
+                    Text(
+                        text = "Working tree clean",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceMuted,
+                        modifier = Modifier.padding(GraphStyle.SPACE_LG),
                     )
                 }
-            }
 
-            if (staged.isNotEmpty()) {
-                ChangeSectionHeader(
-                    title = "Staged",
-                    count = staged.size,
-                    tag = UiTestTags.STAGED_SECTION,
-                    action = {
-                        TextButton(
-                            onClick = { session?.unstage(staged.map { it.path }) },
-                            enabled = !busy,
-                            modifier = Modifier.testTag(UiTestTags.UNSTAGE_ALL),
-                        ) {
-                            Text("Unstage all", style = MaterialTheme.typography.bodySmall)
-                        }
-                    },
-                )
-                staged.forEach { entry ->
-                    ChangeFileRow(
-                        entry = entry,
-                        status = entry.index,
-                        tag = UiTestTags.stagedFile(entry.path),
-                        onOpen = { session?.openDiff(DiffTarget.Staged(entry.path)) },
-                        actions = {
+                if (conflicts.isNotEmpty()) {
+                    ChangeSectionHeader(title = "Conflicts", count = conflicts.size, tag = UiTestTags.CONFLICTS_SECTION)
+                    Text(
+                        text = "Resolve conflicts outside FreeTree. Conflict actions are disabled.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.error,
+                        modifier = Modifier.padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XS),
+                    )
+                    conflicts.forEach { entry ->
+                        ChangeFileRow(
+                            entry = entry,
+                            status = entry.index,
+                            tag = UiTestTags.conflictFile(entry.path),
+                            readOnly = true,
+                            onOpen = { session?.openDiff(DiffTarget.Unstaged(entry.path)) },
+                        )
+                    }
+                }
+
+                if (staged.isNotEmpty()) {
+                    ChangeSectionHeader(
+                        title = "Staged",
+                        count = staged.size,
+                        tag = UiTestTags.STAGED_SECTION,
+                        action = {
                             TextButton(
-                                onClick = { session?.discardStaged(listOf(entry.path)) },
+                                onClick = { session?.unstage(staged.map { it.path }) },
                                 enabled = !busy,
-                                modifier = Modifier
-                                    .height(GraphStyle.CONTROL_HEIGHT)
-                                    .testTag(UiTestTags.discardStaged(entry.path)),
+                                modifier = Modifier.testTag(UiTestTags.UNSTAGE_ALL),
                             ) {
-                                Text("Discard staged", style = MaterialTheme.typography.bodySmall)
+                                Text("Unstage all", style = MaterialTheme.typography.bodySmall)
                             }
                         },
                     )
+                    staged.forEach { entry ->
+                        ChangeFileRow(
+                            entry = entry,
+                            status = entry.index,
+                            tag = UiTestTags.stagedFile(entry.path),
+                            onOpen = { session?.openDiff(DiffTarget.Staged(entry.path)) },
+                            actions = {
+                                TextButton(
+                                    onClick = { session?.discardStaged(listOf(entry.path)) },
+                                    enabled = !busy,
+                                    modifier = Modifier
+                                        .height(GraphStyle.CONTROL_HEIGHT)
+                                        .testTag(UiTestTags.discardStaged(entry.path)),
+                                ) {
+                                    Text("Discard staged", style = MaterialTheme.typography.bodySmall)
+                                }
+                            },
+                        )
+                    }
                 }
-            }
 
-            if (unstaged.isNotEmpty()) {
-                ChangeSectionHeader(
-                    title = "Unstaged",
-                    count = unstaged.size,
-                    tag = UiTestTags.UNSTAGED_SECTION,
-                    action = {
-                        TextButton(
-                            onClick = { session?.stage(unstaged.map { it.path }) },
-                            enabled = !busy,
-                            modifier = Modifier.testTag(UiTestTags.STAGE_ALL),
-                        ) {
-                            Text("Stage all", style = MaterialTheme.typography.bodySmall)
-                        }
-                    },
-                )
-                unstaged.forEach { entry ->
-                    ChangeFileRow(
-                        entry = entry,
-                        status = if (entry.kind == StatusKind.UNTRACKED) '?' else entry.worktree,
-                        tag = UiTestTags.unstagedFile(entry.path),
-                        onOpen = { session?.openDiff(DiffTarget.Unstaged(entry.path)) },
-                        actions = {
+                if (unstaged.isNotEmpty()) {
+                    ChangeSectionHeader(
+                        title = "Unstaged",
+                        count = unstaged.size,
+                        tag = UiTestTags.UNSTAGED_SECTION,
+                        action = {
                             TextButton(
-                                onClick = { session?.stage(listOf(entry.path)) },
+                                onClick = { session?.stage(unstaged.map { it.path }) },
                                 enabled = !busy,
-                                modifier = Modifier
-                                    .height(GraphStyle.CONTROL_HEIGHT)
-                                    .testTag(UiTestTags.stageFile(entry.path)),
+                                modifier = Modifier.testTag(UiTestTags.STAGE_ALL),
                             ) {
-                                Text("Stage", style = MaterialTheme.typography.bodySmall)
-                            }
-                            TextButton(
-                                onClick = { pendingDiscard = entry },
-                                enabled = !busy,
-                                modifier = Modifier
-                                    .height(GraphStyle.CONTROL_HEIGHT)
-                                    .testTag(UiTestTags.discardUnstaged(entry.path)),
-                            ) {
-                                Text("Discard unstaged changes", style = MaterialTheme.typography.bodySmall)
+                                Text("Stage all", style = MaterialTheme.typography.bodySmall)
                             }
                         },
                     )
+                    unstaged.forEach { entry ->
+                        ChangeFileRow(
+                            entry = entry,
+                            status = if (entry.kind == StatusKind.UNTRACKED) '?' else entry.worktree,
+                            tag = UiTestTags.unstagedFile(entry.path),
+                            onOpen = { session?.openDiff(DiffTarget.Unstaged(entry.path)) },
+                            actions = {
+                                TextButton(
+                                    onClick = { session?.stage(listOf(entry.path)) },
+                                    enabled = !busy,
+                                    modifier = Modifier
+                                        .height(GraphStyle.CONTROL_HEIGHT)
+                                        .testTag(UiTestTags.stageFile(entry.path)),
+                                ) {
+                                    Text("Stage", style = MaterialTheme.typography.bodySmall)
+                                }
+                                TextButton(
+                                    onClick = { pendingDiscard = entry },
+                                    enabled = !busy,
+                                    modifier = Modifier
+                                        .height(GraphStyle.CONTROL_HEIGHT)
+                                        .testTag(UiTestTags.discardUnstaged(entry.path)),
+                                ) {
+                                    Text("Discard unstaged changes", style = MaterialTheme.typography.bodySmall)
+                                }
+                            },
+                        )
+                    }
                 }
             }
+            ModernScrollbar(
+                scrollState = changesScrollState,
+                modifier = Modifier.align(Alignment.CenterEnd),
+                alwaysVisible = false,
+                testTag = UiTestTags.CHANGES_SCROLLBAR,
+            )
         }
 
         val target = state.openDiffTarget

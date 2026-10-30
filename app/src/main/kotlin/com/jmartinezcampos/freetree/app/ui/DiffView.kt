@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +38,7 @@ internal fun DiffView(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
+    val listState = rememberLazyListState()
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -115,10 +117,23 @@ internal fun DiffView(
                         }
                     }
                 }
-                LazyColumn(Modifier.fillMaxSize()) {
-                    items(items = diff.lines) { line ->
-                        DiffLineRow(line)
+                Box(Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(end = GraphStyle.SCROLLBAR_GUTTER),
+                    ) {
+                        items(items = diff.lines) { line ->
+                            DiffLineRow(line)
+                        }
                     }
+                    ModernScrollbar(
+                        listState = listState,
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        alwaysVisible = false,
+                        testTag = UiTestTags.DIFF_SCROLLBAR,
+                    )
                 }
             }
         }
