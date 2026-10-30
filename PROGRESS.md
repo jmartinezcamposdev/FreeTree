@@ -539,6 +539,8 @@ All Gradle commands were run with `JAVA_HOME=~/.sdkman/candidates/java/25.0.1-zu
   `01-tab-bar.png` (62,379 B), `02-history-scrollbar.png` (157,535 B),
   `03-commit-changed-files.png` (70,850 B), `04-diff-scrollbar.png` (71,057 B).
   All were visually inspected.
+- `./gradlew :app:packageDmg` → **BUILD SUCCESSFUL**; Dmg rebuilt with the polished UI/icon and
+  launched from the mounted image (`pid 15528`), then quit/detached cleanly.
 - No production defects found; only test-harness notes about lazy-list prefetch and transient-bar
   timing.
 - An untracked `app/icons/FreeTreeIcon.png` (512×512 preview) was already present and was left
