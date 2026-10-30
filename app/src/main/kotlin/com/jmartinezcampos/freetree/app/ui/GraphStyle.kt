@@ -48,6 +48,9 @@ data class GraphColors(
     val statusModified: Color,
     val statusDeleted: Color,
     val statusRenamed: Color,
+    val scrollbarTrack: Color,
+    val scrollbarThumb: Color,
+    val scrollbarThumbHover: Color,
 )
 
 object GraphStyle {
@@ -87,6 +90,22 @@ object GraphStyle {
     val TAB_BAR_HEIGHT: Dp = 32.dp
     val TAB_HEIGHT: Dp = 24.dp
     val TAB_CLOSE_SIZE: Dp = 16.dp
+    val TAB_CORNER_RADIUS: Dp = 6.dp
+    val TAB_BAR_START_PADDING: Dp = 4.dp
+    val NEW_TAB_SIZE: Dp = 22.dp
+    val NEW_TAB_CORNER_RADIUS: Dp = 6.dp
+    val NEW_TAB_ICON_SIZE: Dp = 10.dp
+    val NEW_TAB_ICON_STROKE: Dp = 1.5.dp
+
+    val SCROLLBAR_TRACK_WIDTH: Dp = 10.dp
+    val SCROLLBAR_THUMB_WIDTH: Dp = 6.dp
+    val SCROLLBAR_TRACK_RADIUS: Dp = 5.dp
+    val SCROLLBAR_THUMB_RADIUS: Dp = 3.dp
+    val SCROLLBAR_MIN_THUMB_HEIGHT: Dp = 24.dp
+    val SCROLLBAR_TRACK_MARGIN: Dp = 4.dp
+    val SCROLLBAR_GUTTER: Dp = 12.dp
+    const val SCROLLBAR_HIDE_DELAY_MILLIS: Long = 900L
+    const val SCROLLBAR_FADE_MILLIS: Int = 160
     val TOOLBAR_HEIGHT: Dp = 36.dp
     val DIVIDER_THICKNESS: Dp = 1.dp
     val CONTROL_HEIGHT: Dp = 28.dp
@@ -181,6 +200,9 @@ object GraphStyle {
         statusModified = Color(0xFFFFB74D),
         statusDeleted = Color(0xFFEF9A9A),
         statusRenamed = Color(0xFF90CAF9),
+        scrollbarTrack = Color(0x1FFFFFFF),
+        scrollbarThumb = Color(0x66FFFFFF),
+        scrollbarThumbHover = Color(0x99FFFFFF),
     )
 
     val light: GraphColors = GraphColors(
@@ -228,6 +250,9 @@ object GraphStyle {
         statusModified = Color(0xFFB26A00),
         statusDeleted = Color(0xFFB3261E),
         statusRenamed = Color(0xFF0D47A1),
+        scrollbarTrack = Color(0x14000000),
+        scrollbarThumb = Color(0x4D000000),
+        scrollbarThumbHover = Color(0x80000000),
     )
 
     fun colors(darkTheme: Boolean): GraphColors = if (darkTheme) dark else light

@@ -27,6 +27,7 @@ object UiTestTags {
     const val GRAPH_ERROR = "graph-error"
     const val GRAPH_EMPTY = "graph-empty"
     const val CHANGES_ROW = "graph-changes-row"
+    const val GRAPH_SCROLLBAR = "graph-scrollbar"
 
     const val COMMIT_PANEL = "commit-panel"
     const val COMMIT_HASH = "commit-hash"
@@ -36,6 +37,9 @@ object UiTestTags {
     const val DIFF_LOAD_FULL = "diff-load-full"
     const val DIFF_BINARY = "diff-binary"
     const val DIFF_ERROR = "diff-error"
+    const val DIFF_SCROLLBAR = "diff-scrollbar"
+    const val COMMIT_FILES_SCROLLBAR = "commit-files-scrollbar"
+    const val CHANGES_SCROLLBAR = "changes-scrollbar"
 
     const val CONFLICTS_SECTION = "changes-conflicts"
     const val STAGED_SECTION = "changes-staged"
