@@ -28,6 +28,9 @@ object UiTestTags {
     const val GRAPH_EMPTY = "graph-empty"
     const val CHANGES_ROW = "graph-changes-row"
     const val GRAPH_SCROLLBAR = "graph-scrollbar"
+    const val SPLITTER = "content-splitter"
+    const val COMMIT_SPLITTER = "commit-splitter"
+    const val CHANGES_SPLITTER = "changes-splitter"
 
     const val COMMIT_PANEL = "commit-panel"
     const val COMMIT_HASH = "commit-hash"

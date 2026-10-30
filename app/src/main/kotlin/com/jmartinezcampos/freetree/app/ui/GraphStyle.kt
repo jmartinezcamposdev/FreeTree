@@ -137,8 +137,16 @@ object GraphStyle {
     const val CHIP_MAX: Int = 3
 
     val GRAPH_PANE_WEIGHT: Float = 0.62f
-    val DETAIL_PANE_WEIGHT: Float = 0.38f
     const val FILL_WEIGHT: Float = 1f
+
+    val SPLITTER_HIT_WIDTH: Dp = 10.dp
+    val SPLITTER_HIT_HEIGHT: Dp = 10.dp
+    val MIN_GRAPH_PANE_WIDTH: Dp = 320.dp
+    val MIN_DETAIL_PANE_WIDTH: Dp = 320.dp
+    val MIN_FILES_PANE_HEIGHT: Dp = 100.dp
+    val MIN_DIFF_PANE_HEIGHT: Dp = 120.dp
+    const val COMMIT_FILES_FRACTION: Float = 0.5f
+    const val CHANGES_FILES_FRACTION: Float = 0.5f
 
     const val PAGE_ROWS: Int = 10
     const val QUERY_DEBOUNCE_MILLIS: Long = 300L

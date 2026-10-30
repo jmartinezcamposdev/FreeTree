@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,9 +21,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
@@ -34,6 +38,7 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import com.jmartinezcampos.freetree.app.ui.ChangesPanel
 import com.jmartinezcampos.freetree.app.ui.CommitPanel
@@ -41,9 +46,13 @@ import com.jmartinezcampos.freetree.app.ui.FilterBar
 import com.jmartinezcampos.freetree.app.ui.GraphList
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
 import com.jmartinezcampos.freetree.app.ui.LocalGraphColors
+import com.jmartinezcampos.freetree.app.ui.PreferencesSplitPreferences
+import com.jmartinezcampos.freetree.app.ui.SplitPreferences
 import com.jmartinezcampos.freetree.app.ui.TabBar
 import com.jmartinezcampos.freetree.app.ui.Toolbar
 import com.jmartinezcampos.freetree.app.ui.UiTestTags
+import com.jmartinezcampos.freetree.app.ui.VerticalSplitter
+import com.jmartinezcampos.freetree.app.ui.resizePaneFraction
 import com.jmartinezcampos.freetree.core.model.DiffTarget
 import com.jmartinezcampos.freetree.core.session.RepoSession
 import com.jmartinezcampos.freetree.core.session.RepoUiState
@@ -53,15 +62,17 @@ import com.jmartinezcampos.freetree.core.session.UserMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 
 @Composable
-fun App(
+internal fun App(
     sessionManager: SessionManager,
     onOpenRepository: (() -> Unit)? = null,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit = { session, target ->
         session.openDiff(target, unlimited = true)
     },
+    splitPreferences: SplitPreferences? = null,
 ) {
     val dark = isSystemInDarkTheme()
     val colors = GraphStyle.colors(dark)
+    val resolvedSplitPreferences = splitPreferences ?: remember { PreferencesSplitPreferences() }
     CompositionLocalProvider(LocalGraphColors provides colors) {
         MaterialTheme(
             colorScheme = GraphStyle.materialColors(colors, dark),
@@ -72,6 +83,7 @@ fun App(
                     sessionManager = sessionManager,
                     onOpenRepository = onOpenRepository,
                     loadFullDiff = loadFullDiff,
+                    splitPreferences = resolvedSplitPreferences,
                 )
             }
         }
@@ -83,6 +95,7 @@ private fun AppContent(
     sessionManager: SessionManager,
     onOpenRepository: (() -> Unit)?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
+    splitPreferences: SplitPreferences,
 ) {
     val colors = LocalGraphColors.current
     val tabs by sessionManager.tabs.collectAsState()
@@ -92,6 +105,7 @@ private fun AppContent(
     val stateFlow = activeSession?.state ?: emptyState
     val state by stateFlow.collectAsState()
     val session = activeSession
+    var graphFraction by remember { mutableFloatStateOf(splitPreferences.loadGraphFraction()) }
 
     fun closeActiveTab() {
         activeId?.let(sessionManager::closeTab)
@@ -151,24 +165,52 @@ private fun AppContent(
                 EmptyRepositoryState(onOpenRepository)
             }
         } else {
-            Row(Modifier.weight(GraphStyle.FILL_WEIGHT)) {
-                GraphList(
-                    state = state,
-                    session = session,
-                    modifier = Modifier.weight(GraphStyle.GRAPH_PANE_WEIGHT),
-                )
-                Box(
-                    Modifier
-                        .width(GraphStyle.DIVIDER_THICKNESS)
-                        .fillMaxSize()
-                        .background(colors.divider),
-                )
-                DetailPane(
-                    state = state,
-                    session = session,
-                    loadFullDiff = loadFullDiff,
-                    modifier = Modifier.weight(GraphStyle.DETAIL_PANE_WEIGHT),
-                )
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(GraphStyle.FILL_WEIGHT),
+            ) {
+                val density = LocalDensity.current
+                val contentWidthPx = with(density) {
+                    (maxWidth - GraphStyle.SPLITTER_HIT_WIDTH).toPx()
+                }
+                val minGraphPx = with(density) { GraphStyle.MIN_GRAPH_PANE_WIDTH.toPx() }
+                val minDetailPx = with(density) { GraphStyle.MIN_DETAIL_PANE_WIDTH.toPx() }
+                LaunchedEffect(contentWidthPx) {
+                    graphFraction = resizePaneFraction(
+                        current = graphFraction,
+                        deltaPx = 0f,
+                        contentWidthPx = contentWidthPx,
+                        minLeftPx = minGraphPx,
+                        minRightPx = minDetailPx,
+                    )
+                }
+                Row(Modifier.fillMaxSize()) {
+                    GraphList(
+                        state = state,
+                        session = session,
+                        modifier = Modifier.weight(graphFraction),
+                    )
+                    VerticalSplitter(
+                        onDrag = { delta ->
+                            graphFraction = resizePaneFraction(
+                                current = graphFraction,
+                                deltaPx = delta,
+                                contentWidthPx = contentWidthPx,
+                                minLeftPx = minGraphPx,
+                                minRightPx = minDetailPx,
+                            )
+                        },
+                        onDragStopped = { splitPreferences.saveGraphFraction(graphFraction) },
+                    )
+                    DetailPane(
+                        state = state,
+                        session = session,
+                        loadFullDiff = loadFullDiff,
+                        splitPreferences = splitPreferences,
+                        modifier = Modifier.weight(1f - graphFraction),
+                    )
+                }
             }
         }
 
@@ -185,6 +227,7 @@ private fun DetailPane(
     state: RepoUiState,
     session: RepoSession,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
+    splitPreferences: SplitPreferences,
     modifier: Modifier = Modifier,
 ) {
     when (val selection = state.selection) {
@@ -192,12 +235,14 @@ private fun DetailPane(
             state = state,
             session = session,
             loadFullDiff = loadFullDiff,
+            splitPreferences = splitPreferences,
             modifier = modifier,
         )
         else -> ChangesPanel(
             state = state,
             session = session,
             loadFullDiff = loadFullDiff,
+            splitPreferences = splitPreferences,
             modifier = modifier,
         )
     }

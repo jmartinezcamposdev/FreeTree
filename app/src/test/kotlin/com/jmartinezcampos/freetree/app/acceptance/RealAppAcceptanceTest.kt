@@ -125,10 +125,10 @@ class RealAppAcceptanceTest {
                     val result = repo.gitIn(origin.path, "rev-parse", "--verify", "-q", "refs/heads/main")
                     result.succeeded && result.stdout.trim() == committedHead
                 }
-                assertEquals(
-                    "origin/main",
-                    repo.gitOk("rev-parse", "--abbrev-ref", "@{upstream}"),
-                )
+                awaitCondition("push sets the origin upstream") {
+                    val result = repo.gitIn(repo.workTree, "rev-parse", "--abbrev-ref", "@{upstream}")
+                    result.succeeded && result.stdout.trim() == "origin/main"
+                }
 
                 val remoteHead = GitTestRepo.clone(origin).use { other ->
                     other.commitFile("remote.txt", "remote\n", "Remote advance")

@@ -2,8 +2,10 @@ package com.jmartinezcampos.freetree.app.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,11 +18,18 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import com.jmartinezcampos.freetree.core.model.CommitDetail
 import com.jmartinezcampos.freetree.core.model.DiffTarget
 import com.jmartinezcampos.freetree.core.model.FileChange
 import com.jmartinezcampos.freetree.core.session.RepoSession
@@ -32,11 +41,15 @@ internal fun CommitPanel(
     state: RepoUiState,
     session: RepoSession?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
+    splitPreferences: SplitPreferences,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
     val detail = state.commitDetail
     val filesScrollState = rememberScrollState()
+    var filesFraction by remember {
+        mutableFloatStateOf(splitPreferences.loadCommitFilesFraction())
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -130,46 +143,105 @@ internal fun CommitPanel(
             color = colors.onSurfaceMuted,
             modifier = Modifier.padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XS),
         )
-        Box(
+        val target = state.openDiffTarget
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(GraphStyle.FILL_WEIGHT),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(end = GraphStyle.SCROLLBAR_GUTTER)
-                    .verticalScroll(filesScrollState),
-            ) {
-                state.changedFiles.forEach { change ->
-                    ChangedFileRow(
-                        change = change,
-                        selected = state.openDiffTarget == DiffTarget.InCommit(detail.hash, change),
-                        onClick = { session?.openDiff(DiffTarget.InCommit(detail.hash, change)) },
+            val density = LocalDensity.current
+            val contentHeightPx = with(density) {
+                (maxHeight - GraphStyle.SPLITTER_HIT_HEIGHT).toPx()
+            }
+            val minFilesPx = with(density) { GraphStyle.MIN_FILES_PANE_HEIGHT.toPx() }
+            val minDiffPx = with(density) { GraphStyle.MIN_DIFF_PANE_HEIGHT.toPx() }
+            LaunchedEffect(contentHeightPx) {
+                filesFraction = resizePaneFraction(
+                    current = filesFraction,
+                    deltaPx = 0f,
+                    contentWidthPx = contentHeightPx,
+                    minLeftPx = minFilesPx,
+                    minRightPx = minDiffPx,
+                )
+            }
+
+            if (target is DiffTarget.InCommit && target.hash == detail.hash) {
+                Column(Modifier.fillMaxSize()) {
+                    CommitFileList(
+                        state = state,
+                        detail = detail,
+                        session = session,
+                        filesScrollState = filesScrollState,
+                        modifier = Modifier.weight(filesFraction),
+                    )
+                    HorizontalSplitter(
+                        onDrag = { delta ->
+                            filesFraction = resizePaneFraction(
+                                current = filesFraction,
+                                deltaPx = delta,
+                                contentWidthPx = contentHeightPx,
+                                minLeftPx = minFilesPx,
+                                minRightPx = minDiffPx,
+                            )
+                        },
+                        onDragStopped = {
+                            splitPreferences.saveCommitFilesFraction(filesFraction)
+                        },
+                        testTag = UiTestTags.COMMIT_SPLITTER,
+                    )
+                    val error = state.message as? UserMessage.Error
+                    DiffView(
+                        diff = state.openDiff,
+                        loading = state.openDiff == null && error == null,
+                        error = if (state.openDiff == null) error else null,
+                        onLoadFull = { session?.let { loadFullDiff(it, target) } },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f - filesFraction),
                     )
                 }
+            } else {
+                CommitFileList(
+                    state = state,
+                    detail = detail,
+                    session = session,
+                    filesScrollState = filesScrollState,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
-            ModernScrollbar(
-                scrollState = filesScrollState,
-                modifier = Modifier.align(Alignment.CenterEnd),
-                alwaysVisible = false,
-                testTag = UiTestTags.COMMIT_FILES_SCROLLBAR,
-            )
         }
+    }
+}
 
-        val target = state.openDiffTarget
-        if (target is DiffTarget.InCommit && target.hash == detail.hash) {
-            val error = state.message as? UserMessage.Error
-            DiffView(
-                diff = state.openDiff,
-                loading = state.openDiff == null && error == null,
-                error = if (state.openDiff == null) error else null,
-                onLoadFull = { session?.let { loadFullDiff(it, target) } },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(GraphStyle.FILL_WEIGHT),
-            )
+@Composable
+private fun CommitFileList(
+    state: RepoUiState,
+    detail: CommitDetail,
+    session: RepoSession?,
+    filesScrollState: ScrollState,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(end = GraphStyle.SCROLLBAR_GUTTER)
+                .verticalScroll(filesScrollState),
+        ) {
+            state.changedFiles.forEach { change ->
+                ChangedFileRow(
+                    change = change,
+                    selected = state.openDiffTarget == DiffTarget.InCommit(detail.hash, change),
+                    onClick = { session?.openDiff(DiffTarget.InCommit(detail.hash, change)) },
+                )
+            }
         }
+        ModernScrollbar(
+            scrollState = filesScrollState,
+            modifier = Modifier.align(Alignment.CenterEnd),
+            alwaysVisible = false,
+            testTag = UiTestTags.COMMIT_FILES_SCROLLBAR,
+        )
     }
 }
 
