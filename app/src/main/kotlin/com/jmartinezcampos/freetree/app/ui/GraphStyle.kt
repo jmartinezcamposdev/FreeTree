@@ -87,11 +87,17 @@ object GraphStyle {
     val SPACE_LG: Dp = 12.dp
     val SPACE_XL: Dp = 16.dp
 
-    val TAB_BAR_HEIGHT: Dp = 32.dp
-    val TAB_HEIGHT: Dp = 24.dp
+    val TAB_BAR_HEIGHT: Dp = 34.dp
+    val TAB_HEIGHT: Dp = 26.dp
     val TAB_CLOSE_SIZE: Dp = 16.dp
+    val TAB_CLOSE_ICON_SIZE: Dp = 8.dp
+    val TAB_CLOSE_ICON_STROKE: Dp = 1.3.dp
     val TAB_CORNER_RADIUS: Dp = 6.dp
     val TAB_BAR_START_PADDING: Dp = 4.dp
+    val TAB_HORIZONTAL_PADDING: Dp = 10.dp
+    val TAB_TITLE_WIDTH: Dp = 112.dp
+    val TAB_TEXT_SIZE = 12.sp
+    val TAB_TEXT_LINE_HEIGHT = 16.sp
     val NEW_TAB_SIZE: Dp = 22.dp
     val NEW_TAB_CORNER_RADIUS: Dp = 6.dp
     val NEW_TAB_ICON_SIZE: Dp = 10.dp

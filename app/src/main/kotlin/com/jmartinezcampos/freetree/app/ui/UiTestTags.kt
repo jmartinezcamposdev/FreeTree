@@ -60,6 +60,7 @@ object UiTestTags {
 
     fun tab(index: Int) = "tab-$index"
     fun tabClose(index: Int) = "tab-close-$index"
+    fun tabCloseIcon(index: Int) = "tab-close-icon-$index"
     fun refItem(fullName: String) = "ref-$fullName"
     fun commitRow(row: Int) = "graph-commit-row-$row"
     fun commitRowForHash(hash: String) = "graph-commit-$hash"

@@ -121,16 +121,19 @@ private fun TabItem(
                 indication = ripple(),
                 onClick = onActivate,
             )
-            .padding(horizontal = GraphStyle.SPACE_MD),
+            .padding(horizontal = GraphStyle.TAB_HORIZONTAL_PADDING),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = tabTitle(tab.path),
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodySmall.copy(
+                fontSize = GraphStyle.TAB_TEXT_SIZE,
+                lineHeight = GraphStyle.TAB_TEXT_LINE_HEIGHT,
+            ),
             color = if (active) colors.onSurface else colors.onSurfaceMuted,
             maxLines = GraphStyle.MAX_TEXT_LINES,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.width(GraphStyle.AUTHOR_COLUMN_WIDTH),
+            modifier = Modifier.width(GraphStyle.TAB_TITLE_WIDTH),
         )
         Spacer(Modifier.width(GraphStyle.SPACE_SM))
         Box(
@@ -140,11 +143,30 @@ private fun TabItem(
                 .clickable { onClose() },
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = "×",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceMuted,
-            )
+            Canvas(
+                modifier = Modifier
+                    .size(GraphStyle.TAB_CLOSE_ICON_SIZE)
+                    .testTag(UiTestTags.tabCloseIcon(index)),
+            ) {
+                val stroke = GraphStyle.TAB_CLOSE_ICON_STROKE.toPx()
+                val inset = stroke / 2f
+                val maxX = size.width - inset
+                val maxY = size.height - inset
+                drawLine(
+                    color = colors.onSurfaceMuted,
+                    start = Offset(inset, inset),
+                    end = Offset(maxX, maxY),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color = colors.onSurfaceMuted,
+                    start = Offset(maxX, inset),
+                    end = Offset(inset, maxY),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+            }
         }
     }
 }
