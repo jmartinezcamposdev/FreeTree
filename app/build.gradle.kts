@@ -31,6 +31,9 @@ dependencies {
 compose.desktop {
     application {
         mainClass = "com.jmartinezcampos.freetree.app.MainKt"
+        jvmArgs("-Xdock:name=FreeTree")
+        jvmArgs("-Dapple.awt.application.name=FreeTree")
+        jvmArgs("-Dcom.apple.mrj.application.apple.menu.about.name=FreeTree")
         javaHome = javaToolchains.launcherFor {
             languageVersion = JavaLanguageVersion.of(25)
         }.get().metadata.installationPath.asFile.absolutePath

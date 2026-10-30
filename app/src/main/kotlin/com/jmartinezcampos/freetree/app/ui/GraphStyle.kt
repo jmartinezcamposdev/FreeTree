@@ -79,6 +79,14 @@ object GraphStyle {
 
     val WINDOW_WIDTH: Dp = 1180.dp
     val WINDOW_HEIGHT: Dp = 760.dp
+    val ABOUT_DIALOG_WIDTH: Dp = 420.dp
+    val ABOUT_DIALOG_HEIGHT: Dp = 320.dp
+    val ABOUT_ICON_SIZE: Dp = 96.dp
+    val ABOUT_CONTENT_MARGIN: Dp = 16.dp
+    val ABOUT_TITLE_SIZE = 20.sp
+    val ABOUT_TITLE_LINE_HEIGHT = 24.sp
+    val CONFIRM_DIALOG_WIDTH: Dp = 460.dp
+    val CONFIRM_DIALOG_HEIGHT: Dp = 240.dp
 
     val SPACE_XXS: Dp = 2.dp
     val SPACE_XS: Dp = 4.dp

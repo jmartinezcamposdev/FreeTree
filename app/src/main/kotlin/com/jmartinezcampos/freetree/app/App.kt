@@ -30,6 +30,7 @@ import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -96,10 +97,10 @@ private fun AppContent(
         activeId?.let(sessionManager::closeTab)
     }
 
-    fun activateNextTab() {
+    fun activateRelativeTab(delta: Int) {
         if (tabs.isEmpty()) return
         val current = tabs.indexOfFirst { it.id == activeId }
-        val next = if (current < 0) 0 else (current + 1) % tabs.size
+        val next = if (current < 0) 0 else (current + delta).mod(tabs.size)
         sessionManager.activate(tabs[next].id)
     }
 
@@ -117,7 +118,8 @@ private fun AppContent(
                 true
             }
             Key.Tab -> {
-                activateNextTab()
+                if (!event.isCtrlPressed) return false
+                activateRelativeTab(if (event.isShiftPressed) -1 else 1)
                 true
             }
             else -> false

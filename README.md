@@ -75,8 +75,13 @@ Without an argument, FreeTree restores the previous session or shows the empty s
 | `Home` / `End` | Select the Changes row / the oldest commit |
 | `Ctrl+R` (macOS: `Cmd+R`) | Refresh the active repository |
 | `Ctrl+W` (macOS: `Cmd+W`) | Close the active tab |
-| `Ctrl+Tab` (macOS: `Cmd+Tab`, reserved by the OS) | Activate the next tab |
+| `Ctrl+Tab` | Activate the next tab |
+| `Ctrl+Shift+Tab` | Activate the previous tab |
+| `Ctrl+O` (macOS: `Cmd+O`) | Open a repository |
 | `Enter` in the query field | Apply the query |
+
+The menu bar also exposes repository actions, recent repositories, ref visibility, window
+navigation, and About FreeTree.
 
 ## Packaging
 
