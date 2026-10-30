@@ -1,7 +1,11 @@
 package com.jmartinezcampos.freetree.app.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -21,6 +26,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -29,6 +35,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -47,6 +57,8 @@ import com.jmartinezcampos.freetree.core.session.RepoUiState
 import com.jmartinezcampos.freetree.core.session.TabState
 import kotlinx.coroutines.delay
 
+private const val NEW_TAB_ICON_TAG = "tab-new-icon"
+
 @Composable
 internal fun TabBar(
     tabs: List<TabState>,
@@ -64,54 +76,121 @@ internal fun TabBar(
             .testTag(UiTestTags.TAB_BAR),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Spacer(Modifier.width(GraphStyle.TAB_BAR_START_PADDING))
         tabs.forEachIndexed { index, tab ->
-            val active = tab.id == activeId
-            Row(
-                modifier = Modifier
-                    .height(GraphStyle.TAB_HEIGHT)
-                    .background(if (active) colors.surfaceRaised else colors.surface)
-                    .semantics { selected = active }
-                    .testTag(UiTestTags.tab(index))
-                    .clickable { onActivate(tab.id) }
-                    .padding(horizontal = GraphStyle.SPACE_MD),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = tabTitle(tab.path),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (active) colors.onSurface else colors.onSurfaceMuted,
-                    maxLines = GraphStyle.MAX_TEXT_LINES,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(GraphStyle.AUTHOR_COLUMN_WIDTH),
-                )
-                Spacer(Modifier.width(GraphStyle.SPACE_SM))
-                Box(
-                    modifier = Modifier
-                        .size(GraphStyle.TAB_CLOSE_SIZE)
-                        .testTag(UiTestTags.tabClose(index))
-                        .clickable { onClose(tab.id) },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = "×",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceMuted,
-                    )
-                }
-            }
+            TabItem(
+                tab = tab,
+                index = index,
+                active = tab.id == activeId,
+                onActivate = { onActivate(tab.id) },
+                onClose = { onClose(tab.id) },
+            )
             Spacer(Modifier.width(GraphStyle.SPACE_XXS))
         }
+        NewTabButton(onOpen = onOpen)
+    }
+}
+
+@Composable
+private fun TabItem(
+    tab: TabState,
+    index: Int,
+    active: Boolean,
+    onActivate: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val colors = LocalGraphColors.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val shape = RoundedCornerShape(GraphStyle.TAB_CORNER_RADIUS)
+    val background = when {
+        active -> colors.surfaceRaised
+        hovered -> colors.hoverRow
+        else -> colors.surface
+    }
+    Row(
+        modifier = Modifier
+            .height(GraphStyle.TAB_HEIGHT)
+            .clip(shape)
+            .background(background)
+            .hoverable(interactionSource)
+            .semantics { selected = active }
+            .testTag(UiTestTags.tab(index))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(),
+                onClick = onActivate,
+            )
+            .padding(horizontal = GraphStyle.SPACE_MD),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = tabTitle(tab.path),
+            style = MaterialTheme.typography.bodySmall,
+            color = if (active) colors.onSurface else colors.onSurfaceMuted,
+            maxLines = GraphStyle.MAX_TEXT_LINES,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.width(GraphStyle.AUTHOR_COLUMN_WIDTH),
+        )
+        Spacer(Modifier.width(GraphStyle.SPACE_SM))
         Box(
             modifier = Modifier
                 .size(GraphStyle.TAB_CLOSE_SIZE)
-                .testTag(UiTestTags.NEW_TAB)
-                .clickable(onClick = onOpen),
+                .testTag(UiTestTags.tabClose(index))
+                .clickable { onClose() },
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text = "+",
-                style = MaterialTheme.typography.titleSmall,
+                text = "×",
+                style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceMuted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun NewTabButton(onOpen: () -> Unit) {
+    val colors = LocalGraphColors.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    Box(
+        modifier = Modifier
+            .size(GraphStyle.NEW_TAB_SIZE)
+            .clip(RoundedCornerShape(GraphStyle.NEW_TAB_CORNER_RADIUS))
+            .background(if (hovered) colors.hoverRow else Color.Transparent)
+            .hoverable(interactionSource)
+            .testTag(UiTestTags.NEW_TAB)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(),
+                onClick = onOpen,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(
+            modifier = Modifier
+                .size(GraphStyle.NEW_TAB_ICON_SIZE)
+                .testTag(NEW_TAB_ICON_TAG),
+        ) {
+            val stroke = GraphStyle.NEW_TAB_ICON_STROKE.toPx()
+            val inset = stroke / 2f
+            val midX = size.width / 2f
+            val midY = size.height / 2f
+            val color = if (hovered) colors.onSurface else colors.onSurfaceMuted
+            drawLine(
+                color = color,
+                start = Offset(inset, midY),
+                end = Offset(size.width - inset, midY),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
+            )
+            drawLine(
+                color = color,
+                start = Offset(midX, inset),
+                end = Offset(midX, size.height - inset),
+                strokeWidth = stroke,
+                cap = StrokeCap.Round,
             )
         }
     }
