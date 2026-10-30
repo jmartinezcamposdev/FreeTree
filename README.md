@@ -129,6 +129,18 @@ history changes if log performance degrades.
 - Diffs larger than 2 MB and binary files are truncated or labelled; loading a full diff is an
   explicit action.
 
+## License
+
+FreeTree is free software: you can redistribute it and/or modify it under the terms of the
+GNU General Public License as published by the Free Software Foundation, either version 2 of the
+License, or (at your option) any later version.
+
+FreeTree is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even
+the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+[GNU General Public License](LICENSE) for more details.
+
+SPDX-License-Identifier: GPL-2.0-or-later
+
 ## Documentation
 
 - [docs/SPEC.md](docs/SPEC.md) — specification index and decisions
