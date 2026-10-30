@@ -503,3 +503,43 @@ All Gradle commands were run with `JAVA_HOME=~/.sdkman/candidates/java/25.0.1-zu
 - Canvas curve/arrow aesthetics and exact merge-arrow styling.
 - Chip tooltip presentation and pixel-level chip truncation.
 - Minor window/pane spacing polish beyond the documented `GraphStyle` values.
+
+## Post-MVP UI polish — 2026-10-30
+
+### Requested changes
+
+- [x] Clicking a commit no longer jumps the history scroll position.
+- [x] Active/hover tab highlight uses rounded corners.
+- [x] New-repo `+` button has a rounded highlight and a geometrically centered icon.
+- [x] Tab bar has a small left margin.
+- [x] Reusable modern vertical scrollbar in history, changed-files list, diff panel, and changes list.
+- [x] Scrollbar style: flat rounded semi-transparent track with margins, brighter rounded thumb.
+- [x] History scrollbar always visible; panel scrollbars appear on scroll/drag and fade out.
+
+### Implementation
+
+- New shared `ModernScrollbar.kt` with `ScrollState` and `LazyListState` overloads, built on Compose
+  Desktop `VerticalScrollbar` plus a custom rounded track/thumb style.
+- `GraphList`: removed selection auto-scroll; clicks/parent links preserve the viewport, while
+  keyboard navigation explicitly reveals the selected row.
+- `DiffView`, `CommitPanel`, and `ChangesPanel` reuse the same scrollbar component and reserve
+  `SCROLLBAR_GUTTER`.
+- `Chrome`: rounded active/hover tab backgrounds, rounded Canvas-drawn `+`, and `TAB_BAR_START_PADDING`.
+
+### Verification
+
+- `./gradlew :app:test --rerun-tasks` → **BUILD SUCCESSFUL**; 68 app tests, 0 failures.
+- `./gradlew clean build :core:test --rerun-tasks --no-build-cache` → **BUILD SUCCESSFUL in 2m53s**;
+  17/17 tasks.
+- `./gradlew check` → **BUILD SUCCESSFUL**; 305 core + 68 app tests.
+- New coverage: 3 tab-bar geometry tests, 7 scrollbar/click-stability tests, and 12 independent
+  polish acceptance tests (graph drag, click stability, keyboard reveal, detail scrollbars,
+  tab-bar geometry, screenshot validation).
+- Screenshots generated at `app/build/screenshots/polish/`:
+  `01-tab-bar.png` (62,379 B), `02-history-scrollbar.png` (157,535 B),
+  `03-commit-changed-files.png` (70,850 B), `04-diff-scrollbar.png` (71,057 B).
+  All were visually inspected.
+- No production defects found; only test-harness notes about lazy-list prefetch and transient-bar
+  timing.
+- An untracked `app/icons/FreeTreeIcon.png` (512×512 preview) was already present and was left
+  untouched.
