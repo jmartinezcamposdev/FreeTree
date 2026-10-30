@@ -15,7 +15,7 @@ Parent: [SPEC.md](SPEC.md).
 Rules:
 
 - Each workstream owns its paths; do not edit outside them.
-- Contract changes go through the orchestrator and `DECISIONS.md`.
+- Contract changes go through the orchestrator and `temp/DECISIONS.md` (local-only; never tracked).
 - Work in a branch/worktree; report what changed, commands run, output, and open questions.
 - Deliver with your own tests green. QA writes independent acceptance tests.
 - QA delivers fakes early; they unblock SESSION and UI.
@@ -23,7 +23,8 @@ Rules:
 ## Phases
 
 **Phase 0 — Bootstrap and contracts.** Migrate to `core` + `app`; create contracts; empty window;
-`PROGRESS.md`/`DECISIONS.md`. Gate: `./gradlew build`, `:core:test`, `:app:run`.
+`temp/PROGRESS.md`/`temp/DECISIONS.md` (local-only, never tracked). Gate: `./gradlew build`,
+`:core:test`, `:app:run`.
 
 **Phase 1 — Core.** GIT, GRAPH, and QA in parallel; SESSION starts when fakes exist. Gate: each
 workstream's tests green.
@@ -74,7 +75,10 @@ resolution, branch/tag management.
 
 ## Tracking templates
 
-`PROGRESS.md`:
+`temp/PROGRESS.md` and `temp/DECISIONS.md` are **local-only working docs**. They live under `temp/`
+and must never be tracked or committed to Git.
+
+`temp/PROGRESS.md`:
 
 ```markdown
 # Progress
@@ -103,7 +107,7 @@ resolution, branch/tag management.
 ...
 ```
 
-`DECISIONS.md`:
+`temp/DECISIONS.md`:
 
 ```markdown
 | Date | ID | Decision | Reason | Alternatives |

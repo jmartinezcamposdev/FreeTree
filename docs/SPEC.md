@@ -15,8 +15,10 @@ this page only holds scope, decisions, and the map.
 ## How to use
 
 1. Follow the phases in [10-workflow.md](10-workflow.md). Each phase has a gate.
-2. Decisions marked **[D]** are closed. Record changes in `DECISIONS.md`.
-3. Keep `PROGRESS.md` and `DECISIONS.md` current. Templates: [10-workflow.md](10-workflow.md).
+2. Decisions marked **[D]** are closed. Record changes in `temp/DECISIONS.md` — a local-only working
+   doc that must never be tracked.
+3. Keep `temp/PROGRESS.md` and `temp/DECISIONS.md` current. Both live under `temp/` as local-only
+   working docs and must never be committed. Templates: [10-workflow.md](10-workflow.md).
 4. Never declare work done without running its verification command and reading the output.
 5. Keep the main branch green: `./gradlew check` before merging.
 6. Keep documents short: use the minimum words that preserve the information. Prefer tables and
@@ -65,7 +67,7 @@ Worktrees and submodules must not break the app; they may be shown as ordinary w
 | D9 | Product name **FreeTree**; root package `com.jmartinezcampos.freetree`. |
 | D10 | The MVP is R1–R9. Anything outside them is post-MVP; the non-goals list is explicit. |
 | D11 | Platform priority: macOS, then Linux, then Windows. |
-| D12 | Develop on Java 25. If Compose Multiplatform or Gradle incompatibility is proven, log the fallback JDK in `DECISIONS.md`. |
+| D12 | Develop on Java 25. If Compose Multiplatform or Gradle incompatibility is proven, log the fallback JDK in `temp/DECISIONS.md` (local-only; never tracked). |
 
 ## Architecture
 

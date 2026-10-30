@@ -1,8 +1,30 @@
 # FreeTree
 
-FreeTree is a desktop Git graph client built with Kotlin and Compose Multiplatform Desktop. It
-shows the commit graph, commit details and diffs, the working-tree status, and push/pull for the
-configured `origin`.
+FreeTree is a desktop Git client focused on making repository history easy to read and navigate.
+It renders the commit graph with lanes, merge edges, and branch/tag/HEAD labels, so you can see how
+work diverged and came together without dropping into the terminal. From the same window you can
+inspect commits, review changed files and unified diffs, stage or discard working-tree changes, and
+push or pull against the configured `origin`.
+
+![FreeTree main window](docs/example/example_screenshot.png)
+
+FreeTree is built with Kotlin and Compose Multiplatform Desktop. It uses the system `git` binary as
+its source of truth and never writes directly into `.git`.
+
+> **Status: alpha / work in progress.** FreeTree is usable for everyday repository browsing and
+> basic staging, committing, and push/pull, but it is still being hardened. Expect rough edges,
+> incomplete workflows, and possible breaking changes. Back up important work and prefer a normal
+> Git client or the command line for destructive operations.
+
+## What this program can do
+
+- Browse a visual commit graph with stable lanes, merge arrows, and ref chips.
+- Open a commit to see its metadata, changed files, and unified diff.
+- Review working-tree status and stage, unstage, discard, or commit changes.
+- Push and pull against `origin` without credential prompts.
+- Filter history by refs, author, message, date, or path; hide refs interactively.
+- Keep multiple repositories open in tabs, with only the active repository doing engine work.
+- Navigate the graph and panels with the keyboard.
 
 ## Requirements
 
@@ -10,7 +32,7 @@ configured `origin`.
   matching JDK through the foojay resolver when one is not installed locally.
 - **Git 2.30 or newer** on `PATH`. FreeTree runs the system `git` binary and never writes to
   `.git` directly.
-- macOS is the primary platform, followed by Linux and Windows.
+- Linux, macOS and Windows are supported.
 
 ## Modules
 
@@ -112,5 +134,10 @@ history changes if log performance degrades.
 - [docs/SPEC.md](docs/SPEC.md) — specification index and decisions
 - [docs/01-bootstrap.md](docs/01-bootstrap.md) — layout and Phase 0
 - [docs/09-testing.md](docs/09-testing.md) — test matrix, quality gates, performance targets
-- [PROGRESS.md](PROGRESS.md) — phase status and command evidence
-- [DECISIONS.md](DECISIONS.md) — decision log
+
+Local development logs are intentionally **not tracked**:
+
+- `temp/PROGRESS.md` — local-only phase status and command evidence.
+- `temp/DECISIONS.md` — local-only decision log.
+
+These files live under `temp/` and must never be committed to Git.

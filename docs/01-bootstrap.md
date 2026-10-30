@@ -22,8 +22,7 @@ FreeTree/
 ├─ settings.gradle.kts              include(":core", ":app")
 ├─ gradle/libs.versions.toml
 ├─ docs/                            this documentation
-├─ PROGRESS.md
-├─ DECISIONS.md
+├─ temp/                            local-only; never tracked (PROGRESS.md, DECISIONS.md, legacy specs)
 ├─ core/                            kotlin("jvm") + java-test-fixtures; NO Compose
 │  ├─ src/main/kotlin/com/jmartinezcampos/freetree/core/
 │  │  ├─ model/                     Models.kt
@@ -59,8 +58,9 @@ FreeTree/
 7. Set `mainClass = "com.jmartinezcampos.freetree.app.MainKt"` and
    `nativeDistributions.packageName = "FreeTree"`.
 8. Create the contracts from [02-contracts.md](02-contracts.md).
-9. Create `PROGRESS.md` and `DECISIONS.md` using the templates in
-   [10-workflow.md](10-workflow.md).
+9. Create `temp/PROGRESS.md` and `temp/DECISIONS.md` using the templates in
+   [10-workflow.md](10-workflow.md). They are local-only working docs under `temp/` and must never
+   be tracked.
 10. Update `README.md` with Java/Git requirements, `./gradlew :app:run`, `./gradlew :core:test`,
     `./gradlew check`, and packaging notes.
 11. **Gate:** `./gradlew build`, `./gradlew :core:test`, and an empty `./gradlew :app:run` window
@@ -86,6 +86,6 @@ specific need is approved. Remove unused lifecycle dependencies.
 
 - Java 25. Configure it in the IDE or shell; do not commit local JDK paths. Verify Compose
   Multiplatform 1.12.2 and Gradle compatibility early; if a conflict is proven, record the fallback
-  JDK in `DECISIONS.md`.
+  JDK in `temp/DECISIONS.md` (local-only; never tracked).
 - Git 2.30 or newer.
 - macOS is the development platform; Linux is the next target, then Windows.

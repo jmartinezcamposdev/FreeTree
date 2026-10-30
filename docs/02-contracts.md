@@ -1,6 +1,6 @@
 # 02 — Contracts
 
-Parent: [SPEC.md](SPEC.md). Create these in Phase 0; change them only through `DECISIONS.md`.
+Parent: [SPEC.md](SPEC.md). Create these in Phase 0; change them only through `temp/DECISIONS.md` (local-only; never tracked).
 
 ```kotlin
 // core/model/Models.kt — package com.jmartinezcampos.freetree.core.model

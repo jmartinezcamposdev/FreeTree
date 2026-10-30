@@ -37,11 +37,11 @@ Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
 - `./gradlew check` green (unit/property/session/watcher/integration; not `bench`, not
   screen-dependent UI tests).
 - `./gradlew :core:test` uses no external repo or network.
-- No `TODO` without a `PROGRESS.md` entry.
+- No `TODO` without an entry in `temp/PROGRESS.md` (local-only; never tracked).
 - No silent `catch`.
 - No visual magic numbers outside `GraphStyle.kt`.
 - `core` imports no Compose, AWT, Swing, or `java.awt`.
-- Contract changes recorded in `DECISIONS.md`.
+- Contract changes recorded in `temp/DECISIONS.md` (local-only; never tracked).
 
 ## Adversarial checklist
 
