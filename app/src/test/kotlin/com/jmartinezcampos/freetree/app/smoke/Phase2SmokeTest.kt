@@ -49,9 +49,9 @@ class Phase2SmokeTest {
             onNodeWithTag(UiTestTags.commitRow(0)).assertExists()
             onNodeWithTag(UiTestTags.commitRowForHash(mergeHash))
                 .assertTextContains("Merge topic into main", substring = true)
-            onNodeWithText("HEAD").assertExists()
+            onNodeWithText("HEAD").assertDoesNotExist()
             onNodeWithText("origin/main").assertExists()
-            onNodeWithText("+1").assertExists()
+            onNodeWithText("+1").assertDoesNotExist()
             assertTrue(
                 app.manager.activeSession.value!!.state.value.labelsByCommit.getValue(mergeHash)
                     .any { it.shortName == "v2.0" },

@@ -10,13 +10,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -139,47 +141,65 @@ internal fun ChangesPanel(
             }
         }
 
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(colors.surfaceRaised)
-                .padding(GraphStyle.SPACE_MD),
-            verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
+                .padding(
+                    start = GraphStyle.SPACE_XS,
+                    top = GraphStyle.SPACE_XXS,
+                    end = GraphStyle.SPACE_SM,
+                    bottom = GraphStyle.SPACE_XXS,
+                ),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
         ) {
-            OutlinedTextField(
+            BasicTextField(
                 value = message,
                 onValueChange = { message = it },
-                textStyle = MaterialTheme.typography.bodyMedium,
-                placeholder = {
-                    Text(
-                        text = "Commit message",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceMuted,
-                    )
-                },
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface),
                 minLines = GraphStyle.MESSAGE_MIN_LINES,
                 maxLines = GraphStyle.MESSAGE_MAX_LINES,
                 enabled = session != null && !busy,
+                cursorBrush = SolidColor(colors.primary),
                 modifier = Modifier
-                    .fillMaxWidth()
+                    .weight(GraphStyle.FILL_WEIGHT)
+                    .padding(
+                        start = GraphStyle.SPACE_XL,
+                        top = GraphStyle.SPACE_XL,
+                        end = GraphStyle.SPACE_XL,
+                        bottom = GraphStyle.SPACE_XL,
+                    )
                     .testTag(UiTestTags.COMMIT_MESSAGE),
+                decorationBox = { innerTextField ->
+                    Box {
+                        if (message.isEmpty()) {
+                            Text(
+                                text = "Commit message",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.onSurfaceMuted,
+                                modifier = Modifier.offset(
+                                    x = GraphStyle.COMMIT_PLACEHOLDER_OFFSET_X,
+                                    y = GraphStyle.COMMIT_PLACEHOLDER_OFFSET_Y,
+                                ),
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
+            Button(
+                onClick = {
+                    session?.commit(message)
+                    message = ""
+                },
+                enabled = canCommit,
+                modifier = Modifier
+                    .padding(top = GraphStyle.SPACE_LG, end = GraphStyle.SPACE_MD)
+                    .height(GraphStyle.CONTROL_HEIGHT)
+                    .testTag(UiTestTags.COMMIT_BUTTON),
             ) {
-                Button(
-                    onClick = {
-                        session?.commit(message)
-                        message = ""
-                    },
-                    enabled = canCommit,
-                    modifier = Modifier
-                        .height(GraphStyle.CONTROL_HEIGHT)
-                        .testTag(UiTestTags.COMMIT_BUTTON),
-                ) {
-                    Text("Commit", style = MaterialTheme.typography.bodyMedium)
-                }
+                Text("Commit", style = MaterialTheme.typography.bodyMedium)
             }
         }
     }

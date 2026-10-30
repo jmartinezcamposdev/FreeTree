@@ -61,8 +61,18 @@ class GraphListUiTest {
                 .assertTextContains(firstSubject, substring = true)
             onNodeWithTag(UiTestTags.commitRow(commits.size - 1)).assertExists()
             onNodeWithTag(UiTestTags.commitRow(commits.size)).assertDoesNotExist()
-            onNodeWithText("HEAD").assertExists()
+            onNodeWithText("HEAD").assertDoesNotExist()
             onNodeWithText("origin/main").assertExists()
+
+            val session = fixture.manager.activeSession.value!!
+            session.toggleRef("refs/heads/main")
+            session.toggleRef("refs/remotes/origin/main")
+            waitUntil(timeoutMillis = 5_000) {
+                session.state.value.labelsByCommit[commits[0].hash].orEmpty().none {
+                    it.kind == RefKind.LOCAL_BRANCH || it.kind == RefKind.REMOTE_BRANCH
+                }
+            }
+            onNodeWithText("HEAD").assertExists()
         } finally {
             fixture.close()
         }

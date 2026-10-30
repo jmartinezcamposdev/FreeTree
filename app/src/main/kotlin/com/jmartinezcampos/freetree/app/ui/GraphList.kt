@@ -215,6 +215,7 @@ internal fun GraphList(
             0
         }
         val headHash = state.head?.commit?.takeIf { state.showHead }
+        val showHead = showHeadHighlight(state.head, state.labelsByCommit, state.showHead)
 
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -249,7 +250,7 @@ internal fun GraphList(
                         graph = graph,
                         row = row,
                         refs = state.labelsByCommit[hash].orEmpty(),
-                        isHead = hash == headHash,
+                        isHead = hash == headHash && showHead,
                         isSelected = state.selection is Selection.Commit &&
                             (state.selection as Selection.Commit).hash == hash,
                         visibleLanes = visibleLanes,

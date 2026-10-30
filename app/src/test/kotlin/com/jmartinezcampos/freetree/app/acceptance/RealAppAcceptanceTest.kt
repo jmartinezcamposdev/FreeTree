@@ -244,9 +244,9 @@ class RealAppAcceptanceTest {
                 )
 
                 onNodeWithTag(UiTestTags.commitRowForHash(merge)).assertExists()
-                onNodeWithText("HEAD").assertExists()
+                onNodeWithText("HEAD").assertDoesNotExist()
                 onNodeWithText("release/1.0").assertExists()
-                onNodeWithText("+1").assertExists()
+                onNodeWithText("+1").assertDoesNotExist()
                 onNodeWithText("v1.0").assertExists()
             } finally {
                 manager.close()
