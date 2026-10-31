@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,11 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +37,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.jmartinezcampos.freetree.core.model.DiffTarget
 import com.jmartinezcampos.freetree.core.model.StatusEntry
 import com.jmartinezcampos.freetree.core.model.StatusKind
@@ -61,6 +65,10 @@ internal fun ChangesPanel(
     val changesScrollState = rememberScrollState()
     var filesFraction by remember {
         mutableFloatStateOf(splitPreferences.loadChangesFilesFraction())
+    }
+    val latestFilesFraction = rememberUpdatedState(filesFraction)
+    DisposableEffect(splitPreferences) {
+        onDispose { splitPreferences.saveChangesFilesFraction(latestFilesFraction.value) }
     }
     val busy = state.busy != null
     val canCommit = message.isNotBlank() && staged.isNotEmpty() && conflicts.isEmpty() && !busy && session != null
@@ -289,7 +297,13 @@ private fun ChangesFileList(
                         TextButton(
                             onClick = { session?.unstage(staged.map { it.path }) },
                             enabled = !busy,
-                            modifier = Modifier.testTag(UiTestTags.UNSTAGE_ALL),
+                            contentPadding = PaddingValues(
+                                horizontal = GraphStyle.SPACE_SM,
+                                vertical = 0.dp,
+                            ),
+                            modifier = Modifier
+                                .height(GraphStyle.CHANGE_SECTION_ACTION_HEIGHT)
+                                .testTag(UiTestTags.UNSTAGE_ALL),
                         ) {
                             Text("Unstage all", style = MaterialTheme.typography.bodySmall)
                         }
@@ -325,7 +339,13 @@ private fun ChangesFileList(
                         TextButton(
                             onClick = { session?.stage(unstaged.map { it.path }) },
                             enabled = !busy,
-                            modifier = Modifier.testTag(UiTestTags.STAGE_ALL),
+                            contentPadding = PaddingValues(
+                                horizontal = GraphStyle.SPACE_SM,
+                                vertical = 0.dp,
+                            ),
+                            modifier = Modifier
+                                .height(GraphStyle.CHANGE_SECTION_ACTION_HEIGHT)
+                                .testTag(UiTestTags.STAGE_ALL),
                         ) {
                             Text("Stage all", style = MaterialTheme.typography.bodySmall)
                         }
@@ -381,9 +401,10 @@ private fun ChangeSectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(GraphStyle.CONTROL_HEIGHT)
             .background(colors.surfaceRaised)
             .testTag(tag)
-            .padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XXS),
+            .padding(horizontal = GraphStyle.SPACE_LG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(

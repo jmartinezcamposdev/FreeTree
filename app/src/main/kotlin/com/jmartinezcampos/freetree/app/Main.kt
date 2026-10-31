@@ -7,7 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.jmartinezcampos.freetree.app.menu.AboutDialog
@@ -23,7 +28,12 @@ import com.jmartinezcampos.freetree.app.ui.MessagesWindow
 import com.jmartinezcampos.freetree.app.ui.PreferencesHistoryPreferences
 import com.jmartinezcampos.freetree.app.ui.PreferencesThemePreferences
 import com.jmartinezcampos.freetree.app.ui.PreferencesWindow
+import com.jmartinezcampos.freetree.app.ui.PreferencesWindowPreferences
 import com.jmartinezcampos.freetree.app.ui.ThemeMode
+import com.jmartinezcampos.freetree.app.ui.WindowPreferences
+import com.jmartinezcampos.freetree.app.ui.captureWindowState
+import com.jmartinezcampos.freetree.app.ui.readDesktopScreens
+import com.jmartinezcampos.freetree.app.ui.resolveWindowBounds
 import com.jmartinezcampos.freetree.core.session.MessageLog
 import com.jmartinezcampos.freetree.core.session.RepoSession
 import com.jmartinezcampos.freetree.core.session.SessionManager
@@ -32,7 +42,10 @@ import java.awt.Frame
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
 import javax.swing.JFileChooser
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 
 fun main(args: Array<String>) {
     System.setProperty("apple.awt.application.name", "FreeTree")
@@ -49,6 +62,23 @@ fun main(args: Array<String>) {
         val historyPreferences = remember { PreferencesHistoryPreferences() }
         var historyViewMode by remember { mutableStateOf(historyPreferences.loadViewMode()) }
         var showHistoryDate by remember { mutableStateOf(historyPreferences.loadShowDate()) }
+        val windowPreferences = remember { PreferencesWindowPreferences() }
+        val initialWindowBounds = remember(windowPreferences) {
+            val desktop = readDesktopScreens()
+            resolveWindowBounds(
+                saved = windowPreferences.load(),
+                screens = desktop.screens,
+                primaryId = desktop.primaryId,
+                defaultWidth = GraphStyle.WINDOW_WIDTH.value.roundToInt(),
+                defaultHeight = GraphStyle.WINDOW_HEIGHT.value.roundToInt(),
+                minWidth = GraphStyle.WINDOW_MIN_WIDTH.value.roundToInt(),
+                minHeight = GraphStyle.WINDOW_MIN_HEIGHT.value.roundToInt(),
+            )
+        }
+        val windowState = rememberWindowState(
+            position = WindowPosition(initialWindowBounds.x.dp, initialWindowBounds.y.dp),
+            size = DpSize(initialWindowBounds.width.dp, initialWindowBounds.height.dp),
+        )
         val manager = remember {
             SessionManager(messageLog = messageLog, restore = startupRepository == null)
         }
@@ -96,13 +126,35 @@ fun main(args: Array<String>) {
         DisposableEffect(Unit) { onDispose { manager.close() } }
 
         Window(
-            onCloseRequest = ::exitApplication,
+            onCloseRequest = {
+                saveWindowState(windowState, windowPreferences)
+                exitApplication()
+            },
             title = windowTitle(activeSession?.path, home),
-            state = rememberWindowState(
-                width = GraphStyle.WINDOW_WIDTH,
-                height = GraphStyle.WINDOW_HEIGHT,
-            ),
+            state = windowState,
         ) {
+            val currentWindow = window
+            DisposableEffect(currentWindow, windowState, windowPreferences) {
+                onDispose {
+                    saveWindowState(
+                        windowState,
+                        windowPreferences,
+                        monitorId = currentWindow.graphicsConfiguration?.device?.getIDstring(),
+                    )
+                }
+            }
+            LaunchedEffect(currentWindow, windowState, windowPreferences) {
+                snapshotFlow { windowState.position to windowState.size }
+                    .collectLatest {
+                        delay(WINDOW_STATE_SAVE_DELAY_MILLIS)
+                        saveWindowState(
+                            windowState,
+                            windowPreferences,
+                            monitorId = currentWindow.graphicsConfiguration?.device?.getIDstring(),
+                        )
+                    }
+            }
+
             fun handleCommand(command: AppCommand) {
                 val session = manager.activeSession.value
                 when (command) {
@@ -205,6 +257,21 @@ private data class DiscardRequest(
     val session: RepoSession,
     val paths: List<String>,
 )
+
+private const val WINDOW_STATE_SAVE_DELAY_MILLIS = 350L
+
+private fun saveWindowState(
+    windowState: WindowState,
+    preferences: WindowPreferences,
+    monitorId: String? = null,
+) {
+    val saved = captureWindowState(
+        windowState = windowState,
+        desktop = readDesktopScreens(),
+        monitorId = monitorId,
+    ) ?: return
+    preferences.save(saved)
+}
 
 private fun installMacAboutHandler(onAbout: () -> Unit) {
     if (!System.getProperty("os.name").startsWith("Mac", ignoreCase = true)) return

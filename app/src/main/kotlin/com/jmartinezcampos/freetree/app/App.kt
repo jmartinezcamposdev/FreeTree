@@ -20,11 +20,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -108,6 +110,10 @@ private fun AppContent(
     val state by stateFlow.collectAsState()
     val session = activeSession
     var graphFraction by remember { mutableFloatStateOf(splitPreferences.loadGraphFraction()) }
+    val latestGraphFraction = rememberUpdatedState(graphFraction)
+    DisposableEffect(splitPreferences) {
+        onDispose { splitPreferences.saveGraphFraction(latestGraphFraction.value) }
+    }
 
     fun closeActiveTab() {
         activeId?.let(sessionManager::closeTab)

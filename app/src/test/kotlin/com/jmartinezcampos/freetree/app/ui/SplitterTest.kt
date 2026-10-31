@@ -153,6 +153,30 @@ class SplitterTest {
     }
 
     @Test
+    fun appStartsWithPersistedGraphFraction() = runDesktopComposeUiTest(
+        width = 1400,
+        height = 900,
+    ) {
+        val commits = RandomDag.generate(seed = 92, commitCount = 8)
+        val preferences = InMemorySplitPreferences(value = 0.7f)
+        val fixture = uiFixture(commits = commits)
+        try {
+            setContent { App(fixture.manager, splitPreferences = preferences) }
+            waitUntil(timeoutMillis = 5_000) {
+                fixture.manager.activeSession.value?.state?.value?.graph != null
+            }
+
+            val graph = onNodeWithTag(UiTestTags.GRAPH_LIST).getUnclippedBoundsInRoot()
+            assertTrue(
+                (graph.right - graph.left).value > 900f,
+                "expected the saved 70% graph fraction to be applied: $graph",
+            )
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun draggingTheSplitterChangesPaneWidthsAndIsPersisted() = runDesktopComposeUiTest(
         width = 1400,
         height = 900,

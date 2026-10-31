@@ -81,6 +81,8 @@ object GraphStyle {
 
     val WINDOW_WIDTH: Dp = 1180.dp
     val WINDOW_HEIGHT: Dp = 760.dp
+    val WINDOW_MIN_WIDTH: Dp = 720.dp
+    val WINDOW_MIN_HEIGHT: Dp = 480.dp
     val ABOUT_DIALOG_WIDTH: Dp = 420.dp
     val ABOUT_DIALOG_HEIGHT: Dp = 320.dp
     val ABOUT_ICON_SIZE: Dp = 96.dp
@@ -142,6 +144,7 @@ object GraphStyle {
     val TOOLBAR_BRANCH_MAX_WIDTH: Dp = 280.dp
     val DIVIDER_THICKNESS: Dp = 1.dp
     val CONTROL_HEIGHT: Dp = 28.dp
+    val CHANGE_SECTION_ACTION_HEIGHT: Dp = 24.dp
     val BUSY_INDICATOR_SIZE: Dp = 16.dp
     val PROGRESS_HEIGHT: Dp = 3.dp
     val REFS_PANEL_MAX_HEIGHT: Dp = 220.dp
