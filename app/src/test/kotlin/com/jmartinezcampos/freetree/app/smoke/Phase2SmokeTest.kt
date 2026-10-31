@@ -46,7 +46,7 @@ class Phase2SmokeTest {
             setContent { App(app.manager) }
             awaitGraph(app)
 
-            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changed files (4)")
+            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changed files (4)", substring = true)
             onNodeWithTag(UiTestTags.commitRow(0)).assertExists()
             onNodeWithTag(UiTestTags.commitRowForHash(mergeHash))
                 .assertTextContains("Merge topic into main", substring = true)

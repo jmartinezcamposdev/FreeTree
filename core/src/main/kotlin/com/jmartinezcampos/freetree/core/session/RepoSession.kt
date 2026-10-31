@@ -81,7 +81,7 @@ class RepoSession(
             showRemotes = normalizedInitialTab.showRemotes,
             showTags = normalizedInitialTab.showTags,
             showHead = normalizedInitialTab.showHead,
-            selection = normalizedInitialTab.selectedHash?.let(Selection::Commit) ?: Selection.None,
+            selection = normalizedInitialTab.selectedHash?.let(Selection::Commit) ?: Selection.WorkingTree,
         ),
     )
     val state: StateFlow<RepoUiState> = _state.asStateFlow()
@@ -234,7 +234,8 @@ class RepoSession(
     }
 
     fun select(selection: Selection) {
-        val selectedHash = (selection as? Selection.Commit)?.hash
+        val effective = if (selection is Selection.None) Selection.WorkingTree else selection
+        val selectedHash = (effective as? Selection.Commit)?.hash
         synchronized(lock) {
             selectionJob?.cancel()
             selectionJob = null
@@ -244,7 +245,7 @@ class RepoSession(
             openDiffUnlimited = false
             _state.update {
                 it.copy(
-                    selection = selection,
+                    selection = effective,
                     commitDetail = null,
                     changedFiles = emptyList(),
                     openDiff = null,
@@ -253,14 +254,12 @@ class RepoSession(
             }
         }
         updateTab { it.copy(selectedHash = selectedHash) }
-        if (selection is Selection.Commit) loadCommitDetails(selection.hash)
+        if (effective is Selection.Commit) loadCommitDetails(effective.hash)
     }
 
     fun selectWorkingTree() = select(Selection.WorkingTree)
 
     fun selectCommit(hash: String) = select(Selection.Commit(hash))
-
-    fun clearSelection() = select(Selection.None)
 
     fun openDiff(target: DiffTarget, unlimited: Boolean = false) {
         val context = activeReadContext()
@@ -857,31 +856,18 @@ class RepoSession(
             graphHead = head
             val previous = _state.value
             val selection = previous.selection
-            val adjusted = if (selection is Selection.Commit && snapshot.indexOfHash(selection.hash) < 0) {
-                Selection.None
-            } else {
-                selection
+            val adjusted = when {
+                selection is Selection.Commit && snapshot.indexOfHash(selection.hash) < 0 -> {
+                    Selection.WorkingTree
+                }
+                selection is Selection.None -> Selection.WorkingTree
+                else -> selection
             }
-            val detail = if (adjusted is Selection.None && selection is Selection.Commit) {
-                null
-            } else {
-                previous.commitDetail
-            }
-            val files = if (adjusted is Selection.None && selection is Selection.Commit) {
-                emptyList()
-            } else {
-                previous.changedFiles
-            }
-            val diff = if (adjusted is Selection.None && selection is Selection.Commit) {
-                null
-            } else {
-                previous.openDiff
-            }
-            val diffTarget = if (adjusted is Selection.None && selection is Selection.Commit) {
-                null
-            } else {
-                previous.openDiffTarget
-            }
+            val selectionReplaced = adjusted != selection
+            val detail = if (selectionReplaced) null else previous.commitDetail
+            val files = if (selectionReplaced) emptyList() else previous.changedFiles
+            val diff = if (selectionReplaced) null else previous.openDiff
+            val diffTarget = if (selectionReplaced) null else previous.openDiffTarget
             _state.update {
                 it.copy(
                     graph = snapshot,

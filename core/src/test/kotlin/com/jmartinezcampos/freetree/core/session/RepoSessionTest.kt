@@ -43,6 +43,38 @@ class RepoSessionTest {
     private val sessionPath = Path.of("/repo/session")
 
     @Test
+    fun startsWithWorkingTreeSelected() = runTest {
+        val commits = RandomDag.generate(seed = 20, commitCount = 10)
+        val backend = backend(commits)
+        val session = session(backend, FakeWatcher())
+
+        assertEquals(Selection.WorkingTree, session.state.value.selection)
+
+        session.activate()
+        advanceUntilIdle()
+
+        assertEquals(Selection.WorkingTree, session.state.value.selection)
+        assertNull(session.tab.value.selectedHash)
+        session.close()
+    }
+
+    @Test
+    fun noneSelectionNormalizesToWorkingTree() = runTest {
+        val commits = RandomDag.generate(seed = 22, commitCount = 10)
+        val backend = backend(commits)
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+
+        session.select(Selection.None)
+        advanceUntilIdle()
+
+        assertEquals(Selection.WorkingTree, session.state.value.selection)
+        assertNull(session.tab.value.selectedHash)
+        session.close()
+    }
+
+    @Test
     fun activationLoadsGraphRefsStatusAndLabels() = runTest {
         val commits = RandomDag.generate(seed = 21, commitCount = 30)
         val backend = backend(commits)

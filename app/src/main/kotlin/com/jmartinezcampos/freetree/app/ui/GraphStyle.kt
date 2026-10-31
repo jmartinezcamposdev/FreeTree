@@ -55,6 +55,7 @@ data class GraphColors(
 
 object GraphStyle {
     val ROW_HEIGHT: Dp = 28.dp
+    val CHANGES_ROW_HEIGHT: Dp = 48.dp
     val COMFORTABLE_ROW_HEIGHT: Dp = 48.dp
     val LANE_WIDTH: Dp = 16.dp
     val NODE_RADIUS: Dp = 4.dp

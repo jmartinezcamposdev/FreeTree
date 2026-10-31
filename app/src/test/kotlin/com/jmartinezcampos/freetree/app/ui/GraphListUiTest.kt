@@ -1,6 +1,7 @@
 package com.jmartinezcampos.freetree.app.ui
 
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
+import com.jmartinezcampos.freetree.app.smoke.saveScreenshot
 import com.jmartinezcampos.freetree.core.model.GitRef
 import com.jmartinezcampos.freetree.core.model.HeadInfo
 import com.jmartinezcampos.freetree.core.model.RefKind
@@ -53,7 +55,11 @@ class GraphListUiTest {
                 fixture.manager.activeSession.value?.state?.value?.graph != null
             }
 
-            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changed files (3)")
+            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changed files (3)", substring = true)
+            onNodeWithTag(UiTestTags.CHANGES_ROW)
+                .assertTextContains("Staged (1), Unstaged (2)", substring = true)
+            onNodeWithTag(UiTestTags.CHANGES_ROW).assertIsSelected()
+            onNodeWithTag(UiTestTags.commitRowForHash(commits[0].hash)).assertIsNotSelected()
             onNodeWithTag(UiTestTags.commitRow(0)).assertExists()
             onNodeWithTag(UiTestTags.commitRowForHash(commits[0].hash)).assertExists()
             val firstSubject = fixture.manager.activeSession.value!!.state.value.graph!!.subject(0)
@@ -94,7 +100,8 @@ class GraphListUiTest {
             waitUntil(timeoutMillis = 5_000) {
                 fixture.manager.activeSession.value?.state?.value?.graph != null
             }
-            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("No changed files")
+            onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changed files (0)")
+            saveScreenshot("18-changes-row-empty.png")
         } finally {
             fixture.close()
         }
@@ -122,12 +129,24 @@ class GraphListUiTest {
             }
 
             onNodeWithTag(UiTestTags.commitRowForHash(commits[2].hash)).assertIsSelected()
+            onNodeWithTag(UiTestTags.CHANGES_ROW).assertIsNotSelected()
             onNodeWithTag(UiTestTags.COMMIT_PANEL).assertExists()
             onNodeWithTag(UiTestTags.COMMIT_HASH).assertTextContains(commits[2].hash)
             assertEquals(Selection.Commit(commits[2].hash), fixture.manager.activeSession.value?.state?.value?.selection)
         } finally {
             fixture.close()
         }
+    }
+
+    @Test
+    fun changedFilesLabelOmitsEmptyCounts() {
+        assertEquals("Changed files (0)", changedFilesLabel(0, 0, 0))
+        assertEquals("Changed files (1): Staged (1)", changedFilesLabel(1, 1, 0))
+        assertEquals("Changed files (2): Unstaged (2)", changedFilesLabel(2, 0, 2))
+        assertEquals(
+            "Changed files (3): Staged (1), Unstaged (2)",
+            changedFilesLabel(3, 1, 2),
+        )
     }
 
     @Test

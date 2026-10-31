@@ -17,7 +17,7 @@ data class RepoUiState(
     val labelsByCommit: Map<String, List<GitRef>> = emptyMap(),
     val status: WorkingStatus? = null,
     val operationInProgress: String? = null,
-    val selection: Selection = Selection.None,
+    val selection: Selection = Selection.WorkingTree,
     val commitDetail: CommitDetail? = null,
     val changedFiles: List<FileChange> = emptyList(),
     val openDiff: DiffText? = null,

@@ -53,6 +53,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.jmartinezcampos.freetree.app.menu.stagedPaths
+import com.jmartinezcampos.freetree.app.menu.unstagedPaths
 import com.jmartinezcampos.freetree.core.graph.GraphSnapshot
 import com.jmartinezcampos.freetree.core.graph.SegKind
 import com.jmartinezcampos.freetree.core.model.GitRef
@@ -127,6 +129,7 @@ internal fun GraphList(
             return
         }
         val current = selectedCommitRow
+        if (current < 0 && delta < 0) return
         val target = when {
             current < 0 && delta > 0 -> 0
             current < 0 -> 0
@@ -223,6 +226,8 @@ internal fun GraphList(
         val headHash = state.head?.commit?.takeIf { state.showHead }
         val showHead = showHeadHighlight(state.head, state.labelsByCommit, state.showHead)
         val workingLane = if (graph.rowCount > 0) graph.nodeLane(0) else 0
+        val stagedCount = state.status.stagedPaths().size
+        val unstagedCount = state.status.unstagedPaths().size
 
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -234,6 +239,8 @@ internal fun GraphList(
                 item(key = "changes") {
                     ChangesGraphRow(
                         changeCount = state.status?.entries?.size ?: 0,
+                        stagedCount = stagedCount,
+                        unstagedCount = unstagedCount,
                         selected = state.selection is Selection.WorkingTree,
                         laneWidth = GraphStyle.LANE_WIDTH * visibleLanes.toFloat(),
                         workingLane = workingLane,
@@ -286,6 +293,8 @@ internal fun GraphList(
 @Composable
 private fun ChangesGraphRow(
     changeCount: Int,
+    stagedCount: Int,
+    unstagedCount: Int,
     selected: Boolean,
     laneWidth: androidx.compose.ui.unit.Dp,
     workingLane: Int,
@@ -297,7 +306,7 @@ private fun ChangesGraphRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(GraphStyle.ROW_HEIGHT)
+            .height(GraphStyle.CHANGES_ROW_HEIGHT)
             .background(if (selected) colors.selectedRow else colors.background)
             .semantics { this.selected = selected }
             .testTag(UiTestTags.CHANGES_ROW)
@@ -312,14 +321,30 @@ private fun ChangesGraphRow(
             connectToCommit = connectToCommit,
         )
         Text(
-            text = if (changeCount == 0) "No changed files" else "Changed files ($changeCount)",
+            text = changedFilesLabel(changeCount, stagedCount, unstagedCount),
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Bold,
+            fontWeight = if (changeCount == 0) FontWeight.Normal else FontWeight.Bold,
             color = colors.onSurface,
             modifier = Modifier
                 .weight(GraphStyle.FILL_WEIGHT)
                 .padding(horizontal = GraphStyle.SPACE_SM),
         )
+    }
+}
+
+internal fun changedFilesLabel(
+    changeCount: Int,
+    stagedCount: Int,
+    unstagedCount: Int,
+): String {
+    val details = buildList {
+        if (stagedCount > 0) add("Staged ($stagedCount)")
+        if (unstagedCount > 0) add("Unstaged ($unstagedCount)")
+    }
+    return if (details.isEmpty()) {
+        "Changed files ($changeCount)"
+    } else {
+        "Changed files ($changeCount): ${details.joinToString(", ")}"
     }
 }
 
