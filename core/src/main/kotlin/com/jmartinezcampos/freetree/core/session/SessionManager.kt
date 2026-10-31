@@ -21,7 +21,10 @@ import kotlinx.coroutines.launch
 class SessionManager(
     private val backendFactory: suspend (Path) -> GitBackend = { CliGitBackend.open(it) },
     private val watcherFactory: (Path) -> RepoWatcher = { JdkRepoWatcher() },
-    private val persistence: SessionPersistence = JsonSessionPersistence(defaultSessionStatePath()),
+    private val persistence: SessionPersistence = JsonSessionPersistence(
+        defaultSessionStatePath(),
+        defaultLegacySessionStatePath(),
+    ),
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
     private val readDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val writeDispatcher: CoroutineDispatcher = Dispatchers.Default,

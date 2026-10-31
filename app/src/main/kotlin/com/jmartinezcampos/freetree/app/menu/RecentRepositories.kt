@@ -1,11 +1,8 @@
 package com.jmartinezcampos.freetree.app.menu
 
-import java.nio.charset.StandardCharsets
+import com.jmartinezcampos.freetree.app.ui.AppSettingsController
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
-import java.util.Base64
-import java.util.prefs.BackingStoreException
-import java.util.prefs.Preferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -15,50 +12,18 @@ internal interface RecentRepositoriesStore {
     fun save(paths: List<String>)
 }
 
-internal class PreferencesRecentRepositoriesStore(
-    private val preferences: Preferences = Preferences.userRoot()
-        .node("com/jmartinezcampos/freetree"),
+internal class SettingsRecentRepositoriesStore(
+    private val settingsController: AppSettingsController,
 ) : RecentRepositoriesStore {
-    override fun load(): List<String> {
-        val saved = try {
-            preferences.get(RECENT_REPOSITORIES_KEY, null)
-        } catch (e: SecurityException) {
-            System.err.println("FreeTree: cannot read recent repositories: ${e.message}")
-            return emptyList()
-        } ?: return emptyList()
-
-        return saved.split(',').mapNotNull { encoded ->
-            try {
-                String(Base64.getUrlDecoder().decode(encoded), StandardCharsets.UTF_8)
-            } catch (e: IllegalArgumentException) {
-                System.err.println("FreeTree: ignoring invalid recent repository entry: ${e.message}")
-                null
-            }
-        }
-    }
+    override fun load(): List<String> = settingsController.state.value.recentRepositories
 
     override fun save(paths: List<String>) {
-        val encoded = paths.joinToString(",") { path ->
-            Base64.getUrlEncoder().withoutPadding()
-                .encodeToString(path.toByteArray(StandardCharsets.UTF_8))
-        }
-        try {
-            preferences.put(RECENT_REPOSITORIES_KEY, encoded)
-            preferences.flush()
-        } catch (e: BackingStoreException) {
-            System.err.println("FreeTree: cannot save recent repositories: ${e.message}")
-        } catch (e: SecurityException) {
-            System.err.println("FreeTree: cannot save recent repositories: ${e.message}")
-        }
-    }
-
-    private companion object {
-        const val RECENT_REPOSITORIES_KEY = "recentRepositories"
+        settingsController.setRecentRepositories(paths)
     }
 }
 
 internal class RecentRepositories(
-    private val store: RecentRepositoriesStore = PreferencesRecentRepositoriesStore(),
+    private val store: RecentRepositoriesStore,
     private val maxEntries: Int = 10,
 ) {
     private val mutablePaths = MutableStateFlow(loadPaths())

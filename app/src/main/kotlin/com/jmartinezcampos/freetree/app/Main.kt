@@ -20,19 +20,18 @@ import com.jmartinezcampos.freetree.app.menu.AppCommand
 import com.jmartinezcampos.freetree.app.menu.AppMenuBar
 import com.jmartinezcampos.freetree.app.menu.DiscardUnstagedDialog
 import com.jmartinezcampos.freetree.app.menu.RecentRepositories
+import com.jmartinezcampos.freetree.app.menu.SettingsRecentRepositoriesStore
 import com.jmartinezcampos.freetree.app.menu.stagedPaths
 import com.jmartinezcampos.freetree.app.menu.unstagedPaths
+import com.jmartinezcampos.freetree.app.ui.AppSettingsController
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
-import com.jmartinezcampos.freetree.app.ui.HistoryViewMode
+import com.jmartinezcampos.freetree.app.ui.JsonSettingsStore
+import com.jmartinezcampos.freetree.app.ui.LegacySettingsLoader
 import com.jmartinezcampos.freetree.app.ui.MessagesWindow
-import com.jmartinezcampos.freetree.app.ui.PreferencesHistoryPreferences
-import com.jmartinezcampos.freetree.app.ui.PreferencesThemePreferences
 import com.jmartinezcampos.freetree.app.ui.PreferencesWindow
-import com.jmartinezcampos.freetree.app.ui.PreferencesWindowPreferences
-import com.jmartinezcampos.freetree.app.ui.ThemeMode
-import com.jmartinezcampos.freetree.app.ui.WindowPreferences
 import com.jmartinezcampos.freetree.app.ui.captureWindowState
 import com.jmartinezcampos.freetree.app.ui.readDesktopScreens
+import com.jmartinezcampos.freetree.app.ui.readLegacySettings
 import com.jmartinezcampos.freetree.app.ui.resolveWindowBounds
 import com.jmartinezcampos.freetree.core.session.MessageLog
 import com.jmartinezcampos.freetree.core.session.RepoSession
@@ -57,16 +56,20 @@ fun main(args: Array<String>) {
     application {
         val startupRepository = startupRepository(args)
         val messageLog = remember { MessageLog() }
-        val themePreferences = remember { PreferencesThemePreferences() }
-        var themeMode by remember { mutableStateOf(themePreferences.load()) }
-        val historyPreferences = remember { PreferencesHistoryPreferences() }
-        var historyViewMode by remember { mutableStateOf(historyPreferences.loadViewMode()) }
-        var showHistoryDate by remember { mutableStateOf(historyPreferences.loadShowDate()) }
-        val windowPreferences = remember { PreferencesWindowPreferences() }
-        val initialWindowBounds = remember(windowPreferences) {
+        val settingsController = remember {
+            AppSettingsController(
+                store = JsonSettingsStore(),
+                legacyLoader = LegacySettingsLoader { readLegacySettings() },
+            )
+        }
+        val settings by settingsController.state.collectAsState()
+        val themeMode = settings.themeMode
+        val historyViewMode = settings.historyViewMode
+        val showHistoryDate = settings.showHistoryDate
+        val initialWindowBounds = remember(settingsController) {
             val desktop = readDesktopScreens()
             resolveWindowBounds(
-                saved = windowPreferences.load(),
+                saved = settingsController.state.value.window,
                 screens = desktop.screens,
                 primaryId = desktop.primaryId,
                 defaultWidth = GraphStyle.WINDOW_WIDTH.value.roundToInt(),
@@ -82,7 +85,9 @@ fun main(args: Array<String>) {
         val manager = remember {
             SessionManager(messageLog = messageLog, restore = startupRepository == null)
         }
-        val recentRepositories = remember { RecentRepositories() }
+        val recentRepositories = remember(settingsController) {
+            RecentRepositories(SettingsRecentRepositoriesStore(settingsController))
+        }
         val activeSession by manager.activeSession.collectAsState()
         val aboutRequested by aboutRequests.collectAsState()
         val preferencesRequested by preferencesRequests.collectAsState()
@@ -127,29 +132,29 @@ fun main(args: Array<String>) {
 
         Window(
             onCloseRequest = {
-                saveWindowState(windowState, windowPreferences)
+                saveWindowState(windowState, settingsController)
                 exitApplication()
             },
             title = windowTitle(activeSession?.path, home),
             state = windowState,
         ) {
             val currentWindow = window
-            DisposableEffect(currentWindow, windowState, windowPreferences) {
+            DisposableEffect(currentWindow, windowState, settingsController) {
                 onDispose {
                     saveWindowState(
                         windowState,
-                        windowPreferences,
+                        settingsController,
                         monitorId = currentWindow.graphicsConfiguration?.device?.getIDstring(),
                     )
                 }
             }
-            LaunchedEffect(currentWindow, windowState, windowPreferences) {
+            LaunchedEffect(currentWindow, windowState, settingsController) {
                 snapshotFlow { windowState.position to windowState.size }
                     .collectLatest {
                         delay(WINDOW_STATE_SAVE_DELAY_MILLIS)
                         saveWindowState(
                             windowState,
-                            windowPreferences,
+                            settingsController,
                             monitorId = currentWindow.graphicsConfiguration?.device?.getIDstring(),
                         )
                     }
@@ -201,6 +206,7 @@ fun main(args: Array<String>) {
             App(
                 sessionManager = manager,
                 onOpenRepository = { chooseRepository(openRepository) },
+                settingsController = settingsController,
                 themeMode = themeMode,
                 historyViewMode = historyViewMode,
                 showHistoryDate = showHistoryDate,
@@ -233,20 +239,11 @@ fun main(args: Array<String>) {
         if (showPreferences) {
             PreferencesWindow(
                 themeMode = themeMode,
-                onThemeModeChange = { mode ->
-                    themeMode = mode
-                    themePreferences.save(mode)
-                },
+                onThemeModeChange = settingsController::setThemeMode,
                 historyViewMode = historyViewMode,
-                onHistoryViewModeChange = { mode ->
-                    historyViewMode = mode
-                    historyPreferences.saveViewMode(mode)
-                },
+                onHistoryViewModeChange = settingsController::setHistoryViewMode,
                 showHistoryDate = showHistoryDate,
-                onShowHistoryDateChange = { show ->
-                    showHistoryDate = show
-                    historyPreferences.saveShowDate(show)
-                },
+                onShowHistoryDateChange = settingsController::setShowHistoryDate,
                 onDismiss = { showPreferences = false },
             )
         }
@@ -262,7 +259,7 @@ private const val WINDOW_STATE_SAVE_DELAY_MILLIS = 350L
 
 private fun saveWindowState(
     windowState: WindowState,
-    preferences: WindowPreferences,
+    settingsController: AppSettingsController,
     monitorId: String? = null,
 ) {
     val saved = captureWindowState(
@@ -270,7 +267,7 @@ private fun saveWindowState(
         desktop = readDesktopScreens(),
         monitorId = monitorId,
     ) ?: return
-    preferences.save(saved)
+    settingsController.setWindow(saved)
 }
 
 private fun installMacAboutHandler(onAbout: () -> Unit) {

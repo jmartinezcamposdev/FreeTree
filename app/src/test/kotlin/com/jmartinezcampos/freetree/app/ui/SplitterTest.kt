@@ -11,37 +11,25 @@ import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
 import com.jmartinezcampos.freetree.core.testing.FakeRepoScenarios
 import com.jmartinezcampos.freetree.core.testing.RandomDag
-import java.util.UUID
-import java.util.prefs.Preferences
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class SplitterTest {
-    private class InMemorySplitPreferences(
-        var value: Float = GraphStyle.GRAPH_PANE_WEIGHT,
-        var commitValue: Float = GraphStyle.COMMIT_FILES_FRACTION,
-        var changesValue: Float = GraphStyle.CHANGES_FILES_FRACTION,
-    ) : SplitPreferences {
-        override fun loadGraphFraction(): Float = value
-
-        override fun saveGraphFraction(value: Float) {
-            this.value = value
-        }
-
-        override fun loadCommitFilesFraction(): Float = commitValue
-
-        override fun saveCommitFilesFraction(value: Float) {
-            commitValue = value
-        }
-
-        override fun loadChangesFilesFraction(): Float = changesValue
-
-        override fun saveChangesFilesFraction(value: Float) {
-            changesValue = value
-        }
-    }
+    private fun settings(
+        graph: Float = GraphStyle.GRAPH_PANE_WEIGHT,
+        commit: Float = GraphStyle.COMMIT_FILES_FRACTION,
+        changes: Float = GraphStyle.CHANGES_FILES_FRACTION,
+    ) = AppSettingsController(
+        InMemorySettingsStore(
+            AppSettings(
+                graphPaneFraction = graph,
+                commitFilesFraction = commit,
+                changesFilesFraction = changes,
+            ),
+        ),
+    )
 
     @Test
     fun resizeFractionMovesAndClampsToMinimumWidths() {
@@ -75,35 +63,12 @@ class SplitterTest {
     }
 
     @Test
-    fun splitPreferencesRoundTripsAndClamps() {
-        val node = Preferences.userRoot().node("freetree-test-${UUID.randomUUID()}")
-        try {
-            val preferences = PreferencesSplitPreferences(node)
-            assertEquals(GraphStyle.GRAPH_PANE_WEIGHT, preferences.loadGraphFraction(), 0.0001f)
-            assertEquals(GraphStyle.COMMIT_FILES_FRACTION, preferences.loadCommitFilesFraction(), 0.0001f)
-            assertEquals(GraphStyle.CHANGES_FILES_FRACTION, preferences.loadChangesFilesFraction(), 0.0001f)
-
-            preferences.saveGraphFraction(0.42f)
-            preferences.saveCommitFilesFraction(0.44f)
-            preferences.saveChangesFilesFraction(0.46f)
-            assertEquals(0.42f, preferences.loadGraphFraction(), 0.0001f)
-            assertEquals(0.44f, preferences.loadCommitFilesFraction(), 0.0001f)
-            assertEquals(0.46f, preferences.loadChangesFilesFraction(), 0.0001f)
-
-            preferences.saveGraphFraction(2f)
-            assertEquals(0.95f, preferences.loadGraphFraction(), 0.0001f)
-        } finally {
-            node.removeNode()
-        }
-    }
-
-    @Test
     fun detailPanelSplittersResizeAndPersist() = runDesktopComposeUiTest(
         width = 1400,
         height = 900,
     ) {
         val scenario = FakeRepoScenarios.standard()
-        val preferences = InMemorySplitPreferences()
+        val controller = settings()
         val fixture = uiFixture(
             commits = scenario.commits,
             refs = scenario.refs,
@@ -115,7 +80,7 @@ class SplitterTest {
             path = "/repo/split",
         )
         try {
-            setContent { App(fixture.manager, splitPreferences = preferences) }
+            setContent { App(fixture.manager, settingsController = controller) }
             waitUntil(timeoutMillis = 5_000) {
                 fixture.manager.activeSession.value?.state?.value?.graph != null
             }
@@ -132,7 +97,7 @@ class SplitterTest {
                 swipe(center, Offset(center.x, center.y + 100f), 250)
             }
             waitForIdle()
-            assertTrue(preferences.commitValue > GraphStyle.COMMIT_FILES_FRACTION)
+            assertTrue(controller.state.value.commitFilesFraction > GraphStyle.COMMIT_FILES_FRACTION)
 
             onNodeWithTag(UiTestTags.CHANGES_ROW).performClick()
             waitUntil(timeoutMillis = 5_000) {
@@ -146,7 +111,7 @@ class SplitterTest {
                 swipe(center, Offset(center.x, center.y + 100f), 250)
             }
             waitForIdle()
-            assertTrue(preferences.changesValue > GraphStyle.CHANGES_FILES_FRACTION)
+            assertTrue(controller.state.value.changesFilesFraction > GraphStyle.CHANGES_FILES_FRACTION)
         } finally {
             fixture.close()
         }
@@ -158,10 +123,10 @@ class SplitterTest {
         height = 900,
     ) {
         val commits = RandomDag.generate(seed = 92, commitCount = 8)
-        val preferences = InMemorySplitPreferences(value = 0.7f)
+        val controller = settings(graph = 0.7f)
         val fixture = uiFixture(commits = commits)
         try {
-            setContent { App(fixture.manager, splitPreferences = preferences) }
+            setContent { App(fixture.manager, settingsController = controller) }
             waitUntil(timeoutMillis = 5_000) {
                 fixture.manager.activeSession.value?.state?.value?.graph != null
             }
@@ -182,10 +147,10 @@ class SplitterTest {
         height = 900,
     ) {
         val commits = RandomDag.generate(seed = 91, commitCount = 12)
-        val preferences = InMemorySplitPreferences()
+        val controller = settings()
         val fixture = uiFixture(commits = commits)
         try {
-            setContent { App(fixture.manager, splitPreferences = preferences) }
+            setContent { App(fixture.manager, settingsController = controller) }
             waitUntil(timeoutMillis = 5_000) {
                 fixture.manager.activeSession.value?.state?.value?.graph != null
             }
@@ -206,7 +171,7 @@ class SplitterTest {
                 graphAfter.right > graphBefore.right,
                 "expected the graph pane to grow: $graphBefore -> $graphAfter",
             )
-            assertTrue(preferences.value > GraphStyle.GRAPH_PANE_WEIGHT)
+            assertTrue(controller.state.value.graphPaneFraction > GraphStyle.GRAPH_PANE_WEIGHT)
             assertTrue((splitter.right - splitter.left).value >= GraphStyle.SPLITTER_HIT_WIDTH.value - 0.5f)
         } finally {
             fixture.close()

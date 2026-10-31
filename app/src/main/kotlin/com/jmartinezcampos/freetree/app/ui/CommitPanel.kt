@@ -46,18 +46,18 @@ internal fun CommitPanel(
     state: RepoUiState,
     session: RepoSession?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
-    splitPreferences: SplitPreferences,
+    settingsController: AppSettingsController,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
     val detail = state.commitDetail
     val filesScrollState = rememberScrollState()
     var filesFraction by remember {
-        mutableFloatStateOf(splitPreferences.loadCommitFilesFraction())
+        mutableFloatStateOf(settingsController.state.value.commitFilesFraction)
     }
     val latestFilesFraction = rememberUpdatedState(filesFraction)
-    DisposableEffect(splitPreferences) {
-        onDispose { splitPreferences.saveCommitFilesFraction(latestFilesFraction.value) }
+    DisposableEffect(settingsController) {
+        onDispose { settingsController.setCommitFilesFraction(latestFilesFraction.value) }
     }
     Column(
         modifier = modifier
@@ -191,7 +191,7 @@ internal fun CommitPanel(
                             )
                         },
                         onDragStopped = {
-                            splitPreferences.saveCommitFilesFraction(filesFraction)
+                            settingsController.setCommitFilesFraction(filesFraction)
                         },
                         testTag = UiTestTags.COMMIT_SPLITTER,
                     )

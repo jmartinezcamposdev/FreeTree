@@ -42,15 +42,15 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import com.jmartinezcampos.freetree.app.ui.AppSettingsController
 import com.jmartinezcampos.freetree.app.ui.AppTheme
 import com.jmartinezcampos.freetree.app.ui.ChangesPanel
 import com.jmartinezcampos.freetree.app.ui.CommitPanel
 import com.jmartinezcampos.freetree.app.ui.GraphList
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
 import com.jmartinezcampos.freetree.app.ui.HistoryViewMode
+import com.jmartinezcampos.freetree.app.ui.InMemorySettingsStore
 import com.jmartinezcampos.freetree.app.ui.LocalGraphColors
-import com.jmartinezcampos.freetree.app.ui.PreferencesSplitPreferences
-import com.jmartinezcampos.freetree.app.ui.SplitPreferences
 import com.jmartinezcampos.freetree.app.ui.TabBar
 import com.jmartinezcampos.freetree.app.ui.ThemeMode
 import com.jmartinezcampos.freetree.app.ui.Toolbar
@@ -72,19 +72,21 @@ internal fun App(
     loadFullDiff: (RepoSession, DiffTarget) -> Unit = { session, target ->
         session.openDiff(target, unlimited = true)
     },
-    splitPreferences: SplitPreferences? = null,
+    settingsController: AppSettingsController? = null,
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     historyViewMode: HistoryViewMode = HistoryViewMode.COMPACT,
     showHistoryDate: Boolean = true,
 ) {
-    val resolvedSplitPreferences = splitPreferences ?: remember { PreferencesSplitPreferences() }
+    val resolvedSettings = settingsController ?: remember {
+        AppSettingsController(InMemorySettingsStore())
+    }
     AppTheme(themeMode) {
         Surface(modifier = Modifier.fillMaxSize()) {
             AppContent(
                 sessionManager = sessionManager,
                 onOpenRepository = onOpenRepository,
                 loadFullDiff = loadFullDiff,
-                splitPreferences = resolvedSplitPreferences,
+                settingsController = resolvedSettings,
                 historyViewMode = historyViewMode,
                 showHistoryDate = showHistoryDate,
             )
@@ -97,7 +99,7 @@ private fun AppContent(
     sessionManager: SessionManager,
     onOpenRepository: (() -> Unit)?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
-    splitPreferences: SplitPreferences,
+    settingsController: AppSettingsController,
     historyViewMode: HistoryViewMode,
     showHistoryDate: Boolean,
 ) {
@@ -109,10 +111,12 @@ private fun AppContent(
     val stateFlow = activeSession?.state ?: emptyState
     val state by stateFlow.collectAsState()
     val session = activeSession
-    var graphFraction by remember { mutableFloatStateOf(splitPreferences.loadGraphFraction()) }
+    var graphFraction by remember {
+        mutableFloatStateOf(settingsController.state.value.graphPaneFraction)
+    }
     val latestGraphFraction = rememberUpdatedState(graphFraction)
-    DisposableEffect(splitPreferences) {
-        onDispose { splitPreferences.saveGraphFraction(latestGraphFraction.value) }
+    DisposableEffect(settingsController) {
+        onDispose { settingsController.setGraphPaneFraction(latestGraphFraction.value) }
     }
 
     fun closeActiveTab() {
@@ -209,13 +213,13 @@ private fun AppContent(
                                 minRightPx = minDetailPx,
                             )
                         },
-                        onDragStopped = { splitPreferences.saveGraphFraction(graphFraction) },
+                        onDragStopped = { settingsController.setGraphPaneFraction(graphFraction) },
                     )
                     DetailPane(
                         state = state,
                         session = session,
                         loadFullDiff = loadFullDiff,
-                        splitPreferences = splitPreferences,
+                        settingsController = settingsController,
                         modifier = Modifier.weight(1f - graphFraction),
                     )
                 }
@@ -235,7 +239,7 @@ private fun DetailPane(
     state: RepoUiState,
     session: RepoSession,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
-    splitPreferences: SplitPreferences,
+    settingsController: AppSettingsController,
     modifier: Modifier = Modifier,
 ) {
     when (val selection = state.selection) {
@@ -243,14 +247,14 @@ private fun DetailPane(
             state = state,
             session = session,
             loadFullDiff = loadFullDiff,
-            splitPreferences = splitPreferences,
+            settingsController = settingsController,
             modifier = modifier,
         )
         else -> ChangesPanel(
             state = state,
             session = session,
             loadFullDiff = loadFullDiff,
-            splitPreferences = splitPreferences,
+            settingsController = settingsController,
             modifier = modifier,
         )
     }

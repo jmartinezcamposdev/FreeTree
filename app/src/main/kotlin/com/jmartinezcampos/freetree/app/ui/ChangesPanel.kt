@@ -50,7 +50,7 @@ internal fun ChangesPanel(
     state: RepoUiState,
     session: RepoSession?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
-    splitPreferences: SplitPreferences,
+    settingsController: AppSettingsController,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
@@ -64,11 +64,11 @@ internal fun ChangesPanel(
     var pendingDiscard by remember(session?.id) { mutableStateOf<StatusEntry?>(null) }
     val changesScrollState = rememberScrollState()
     var filesFraction by remember {
-        mutableFloatStateOf(splitPreferences.loadChangesFilesFraction())
+        mutableFloatStateOf(settingsController.state.value.changesFilesFraction)
     }
     val latestFilesFraction = rememberUpdatedState(filesFraction)
-    DisposableEffect(splitPreferences) {
-        onDispose { splitPreferences.saveChangesFilesFraction(latestFilesFraction.value) }
+    DisposableEffect(settingsController) {
+        onDispose { settingsController.setChangesFilesFraction(latestFilesFraction.value) }
     }
     val busy = state.busy != null
     val canCommit = message.isNotBlank() && staged.isNotEmpty() && conflicts.isEmpty() && !busy && session != null
@@ -122,7 +122,7 @@ internal fun ChangesPanel(
                             )
                         },
                         onDragStopped = {
-                            splitPreferences.saveChangesFilesFraction(filesFraction)
+                            settingsController.setChangesFilesFraction(filesFraction)
                         },
                         testTag = UiTestTags.CHANGES_SPLITTER,
                     )
