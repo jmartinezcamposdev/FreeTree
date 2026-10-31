@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -95,6 +96,9 @@ internal fun DiffView(
                 }
             }
             else -> {
+                val visibleLines = remember(diff) {
+                    diff.lines.filterNot { it.kind == DiffLineKind.FILE_HEADER }
+                }
                 if (diff.truncated) {
                     Row(
                         modifier = Modifier
@@ -118,22 +122,37 @@ internal fun DiffView(
                     }
                 }
                 Box(Modifier.fillMaxSize()) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(end = GraphStyle.SCROLLBAR_GUTTER),
-                    ) {
-                        items(items = diff.lines) { line ->
-                            DiffLineRow(line)
+                    if (visibleLines.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .testTag(UiTestTags.DIFF_EMPTY),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = "No textual changes",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.onSurfaceMuted,
+                            )
                         }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(end = GraphStyle.SCROLLBAR_GUTTER),
+                        ) {
+                            items(items = visibleLines) { line ->
+                                DiffLineRow(line)
+                            }
+                        }
+                        ModernScrollbar(
+                            listState = listState,
+                            modifier = Modifier.align(Alignment.CenterEnd),
+                            alwaysVisible = false,
+                            testTag = UiTestTags.DIFF_SCROLLBAR,
+                        )
                     }
-                    ModernScrollbar(
-                        listState = listState,
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                        alwaysVisible = false,
-                        testTag = UiTestTags.DIFF_SCROLLBAR,
-                    )
                 }
             }
         }

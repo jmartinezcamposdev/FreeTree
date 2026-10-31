@@ -8,9 +8,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -21,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -63,78 +66,75 @@ internal fun CommitPanel(
             return@Column
         }
 
-        SelectionContainer {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_MD),
-                verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
-            ) {
-                Text(
-                    text = detail.hash,
-                    style = GraphStyle.monoTextStyle,
-                    color = colors.onSurface,
-                    modifier = Modifier.testTag(UiTestTags.COMMIT_HASH),
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_MD),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_MD),
+            verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
+        ) {
+            SelectionContainer {
+                Column(verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS)) {
                     Text(
-                        text = detail.authorName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        text = detail.hash,
+                        style = GraphStyle.monoTextStyle,
                         color = colors.onSurface,
-                        modifier = Modifier.testTag(UiTestTags.COMMIT_AUTHOR),
+                        modifier = Modifier.testTag(UiTestTags.COMMIT_HASH),
                     )
-                    Text(
-                        text = formatDate(detail.authorTimeSec),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceMuted,
-                    )
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = "Parents:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceMuted,
-                    )
-                    if (detail.parents.isEmpty()) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_MD),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
-                            text = "none (root)",
+                            text = detail.authorName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.onSurface,
+                            modifier = Modifier.testTag(UiTestTags.COMMIT_AUTHOR),
+                        )
+                        Text(
+                            text = formatDate(detail.authorTimeSec),
                             style = MaterialTheme.typography.bodySmall,
                             color = colors.onSurfaceMuted,
                         )
-                    } else {
-                        detail.parents.forEach { parent ->
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Parents:",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceMuted,
+                        )
+                        if (detail.parents.isEmpty()) {
                             Text(
-                                text = abbreviateHash(parent),
-                                style = GraphStyle.monoTextStyle,
-                                color = colors.primary,
-                                modifier = Modifier
-                                    .testTag(UiTestTags.parentLink(parent))
-                                    .clickable { session?.selectCommit(parent) },
+                                text = "none (root)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceMuted,
                             )
+                        } else {
+                            detail.parents.forEach { parent ->
+                                Text(
+                                    text = abbreviateHash(parent),
+                                    style = GraphStyle.monoTextStyle,
+                                    color = colors.primary,
+                                    modifier = Modifier
+                                        .testTag(UiTestTags.parentLink(parent))
+                                        .clickable { session?.selectCommit(parent) },
+                                )
+                            }
                         }
                     }
+                    if (detail.parents.size > 1) {
+                        Text(
+                            text = "Merge commit with ${detail.parents.size} parents",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceMuted,
+                        )
+                    }
                 }
-                if (detail.parents.size > 1) {
-                    Text(
-                        text = "Merge commit with ${detail.parents.size} parents",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceMuted,
-                    )
-                }
-                Text(
-                    text = detail.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurface,
-                    modifier = Modifier.padding(top = GraphStyle.SPACE_XS),
-                )
             }
+            CommitMessage(hash = detail.hash, message = detail.message)
         }
 
         Text(
@@ -209,6 +209,47 @@ internal fun CommitPanel(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun CommitMessage(
+    hash: String,
+    message: String,
+) {
+    val colors = LocalGraphColors.current
+    val trimmed = remember(message) { message.trimEnd() }
+    val firstLine = remember(trimmed) { trimmed.lineSequence().firstOrNull().orEmpty() }
+    val hasMore = remember(trimmed) { trimmed.contains('\n') }
+    var expanded by remember(hash) { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = GraphStyle.SPACE_XS),
+        verticalAlignment = if (expanded) Alignment.Top else Alignment.CenterVertically,
+    ) {
+        SelectionContainer(Modifier.weight(GraphStyle.FILL_WEIGHT)) {
+            Text(
+                text = if (expanded) trimmed else firstLine,
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurface,
+                maxLines = if (expanded) Int.MAX_VALUE else 1,
+                overflow = if (expanded) TextOverflow.Clip else TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(UiTestTags.COMMIT_DETAIL_MESSAGE),
+            )
+        }
+        if (hasMore) {
+            Spacer(Modifier.width(GraphStyle.SPACE_MD))
+            CompactToggleAction(
+                expanded = expanded,
+                collapsedDescription = "Expand commit message",
+                expandedDescription = "Collapse commit message",
+                testTag = UiTestTags.COMMIT_DETAIL_MESSAGE_TOGGLE,
+                onClick = { expanded = !expanded },
+            )
         }
     }
 }

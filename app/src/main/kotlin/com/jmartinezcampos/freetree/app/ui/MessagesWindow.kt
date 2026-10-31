@@ -2,7 +2,6 @@ package com.jmartinezcampos.freetree.app.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -28,14 +26,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
@@ -200,7 +195,7 @@ private fun MessageLogRow(entry: MessageLogEntry) {
             }
         }
         Spacer(Modifier.width(GraphStyle.SPACE_MD))
-        LogAction(
+        CompactAction(
             description = "Copy message",
             testTag = UiTestTags.messageLogCopy(entry.id),
             onClick = { copyToClipboard(messageCopyText(entry)) },
@@ -208,37 +203,13 @@ private fun MessageLogRow(entry: MessageLogEntry) {
             CopyIcon()
         }
         Spacer(Modifier.width(GraphStyle.SPACE_XXS))
-        LogAction(
-            description = if (expanded) "Collapse message" else "Expand message",
+        CompactToggleAction(
+            expanded = expanded,
+            collapsedDescription = "Expand message",
+            expandedDescription = "Collapse message",
             testTag = UiTestTags.messageLogToggle(entry.id),
             onClick = { expanded = !expanded },
-        ) {
-            Text(
-                text = if (expanded) "▼" else "▲",
-                style = MaterialTheme.typography.labelSmall,
-                color = colors.onSurfaceMuted,
-            )
-        }
-    }
-}
-
-@Composable
-private fun LogAction(
-    description: String,
-    testTag: String,
-    onClick: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Box(
-        modifier = Modifier
-            .size(GraphStyle.LOG_ACTION_SIZE)
-            .clip(RoundedCornerShape(GraphStyle.LOG_CORNER_RADIUS))
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = description }
-            .testTag(testTag),
-        contentAlignment = Alignment.Center,
-    ) {
-        content()
+        )
     }
 }
 

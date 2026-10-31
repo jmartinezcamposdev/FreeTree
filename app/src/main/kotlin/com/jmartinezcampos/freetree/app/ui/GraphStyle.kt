@@ -94,8 +94,8 @@ object GraphStyle {
     val LOG_TIMESTAMP_WIDTH: Dp = 64.dp
     val LOG_LEVEL_WIDTH: Dp = 44.dp
     val LOG_REPO_WIDTH: Dp = 150.dp
-    val LOG_CORNER_RADIUS: Dp = 6.dp
-    val LOG_ACTION_SIZE: Dp = 20.dp
+    val COMPACT_ACTION_CORNER_RADIUS: Dp = 6.dp
+    val COMPACT_ACTION_SIZE: Dp = 20.dp
     val LOG_ICON_SIZE: Dp = 11.dp
     val LOG_ICON_STROKE: Dp = 1.2.dp
     val THEME_OPTION_CORNER_RADIUS: Dp = 6.dp
