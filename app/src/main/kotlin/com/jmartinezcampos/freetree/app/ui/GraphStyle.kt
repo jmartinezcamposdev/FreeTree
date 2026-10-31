@@ -92,6 +92,7 @@ object GraphStyle {
     val SPACE_XS: Dp = 4.dp
     val SPACE_SM: Dp = 6.dp
     val SPACE_MD: Dp = 8.dp
+    val SPACE_ML: Dp = 10.dp
     val SPACE_LG: Dp = 12.dp
     val SPACE_XL: Dp = 16.dp
 
@@ -156,13 +157,14 @@ object GraphStyle {
     const val HASH_ABBREVIATION: Int = 8
     const val MESSAGE_MIN_LINES: Int = 3
     const val MESSAGE_MAX_LINES: Int = 6
+    val MESSAGE_DISMISS_CORNER_RADIUS: Dp = 10.dp
     val COMMIT_PLACEHOLDER_OFFSET_X: Dp = 0.dp
     val COMMIT_PLACEHOLDER_OFFSET_Y: Dp = 0.dp
     const val TOOLTIP_DELAY_MILLIS: Int = 300
     const val MAX_TEXT_LINES: Int = 1
     const val MAX_DIFF_LINE_CHARS: Int = 2_000
 
-    val DATE_PATTERN: String = "yyyy-MM-dd HH:mm"
+    const val DATE_PATTERN: String = "yyyy-MM-dd HH:mm"
 
     val typography: Typography = Typography(
         bodyMedium = TextStyle(fontSize = BODY_SIZE, lineHeight = BODY_LINE_HEIGHT),

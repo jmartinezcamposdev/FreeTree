@@ -1,6 +1,7 @@
 package com.jmartinezcampos.freetree.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,12 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
@@ -298,8 +300,8 @@ private fun MessageBar(
             .padding(horizontal = GraphStyle.SPACE_MD, vertical = GraphStyle.SPACE_XS),
         verticalAlignment = Alignment.Top,
     ) {
-        SelectionContainer {
-            Column(Modifier.weight(GraphStyle.FILL_WEIGHT)) {
+        SelectionContainer(Modifier.weight(GraphStyle.FILL_WEIGHT)) {
+            Column(Modifier.fillMaxWidth()) {
                 Text(
                     text = when (message) {
                         is UserMessage.Info -> message.text
@@ -319,12 +321,21 @@ private fun MessageBar(
                 }
             }
         }
-        Spacer(Modifier.width(GraphStyle.SPACE_SM))
-        TextButton(
-            onClick = onDismiss,
-            modifier = Modifier.testTag(UiTestTags.DISMISS_MESSAGE),
+        Spacer(Modifier.width(GraphStyle.SPACE_XL))
+        Box(
+            modifier = Modifier
+                .padding(top = GraphStyle.SPACE_ML, end = GraphStyle.SPACE_LG)
+                .clip(RoundedCornerShape(GraphStyle.MESSAGE_DISMISS_CORNER_RADIUS))
+                .clickable(onClick = onDismiss)
+                .padding(horizontal = GraphStyle.SPACE_MD, vertical = GraphStyle.SPACE_XS)
+                .testTag(UiTestTags.DISMISS_MESSAGE),
+            contentAlignment = Alignment.Center,
         ) {
-            Text("Dismiss", style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = "Dismiss",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }
