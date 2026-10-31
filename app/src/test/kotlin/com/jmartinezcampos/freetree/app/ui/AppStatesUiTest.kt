@@ -78,7 +78,7 @@ class AppStatesUiTest {
                 onNodeWithTag(UiTestTags.MESSAGE_BAR).assertExists()
                 onNodeWithText("Repository watcher unavailable", substring = true).assertExists()
                 onNodeWithTag(UiTestTags.CHANGES_ROW).assertExists()
-                onNodeWithTag(UiTestTags.REFRESH).performClick()
+                manager.activeSession.value!!.refresh()
                 waitUntil(timeoutMillis = 10_000) {
                     val session = manager.activeSession.value
                     session?.state?.value?.graph != null && session.phase.value == SessionPhase.ACTIVE

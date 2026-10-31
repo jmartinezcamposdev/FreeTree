@@ -1,13 +1,11 @@
 package com.jmartinezcampos.freetree.app.acceptance
 
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
@@ -388,8 +386,8 @@ class RealAppAcceptanceTest {
                 manager.openRepo(repo.workTree)
                 awaitLoaded(manager)
 
-                onNodeWithTag(UiTestTags.REFS_TOGGLE).performClick()
-                onNodeWithTag(UiTestTags.refItem("refs/heads/topic")).performClick()
+                val session = manager.activeSession.value!!
+                session.toggleRef("refs/heads/topic")
                 waitUntil(timeoutMillis = 20_000) {
                     val current = state(manager)
                     "refs/heads/topic" in current.hiddenRefs &&
@@ -397,11 +395,7 @@ class RealAppAcceptanceTest {
                         current.graph!!.indexOfHash(topic) < 0
                 }
 
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextReplacement("author:Ada")
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                session.applyQuery("author:Ada")
                 waitUntil(timeoutMillis = 20_000) {
                     val current = state(manager)
                     current.query == "author:Ada" &&
@@ -415,16 +409,11 @@ class RealAppAcceptanceTest {
                 assertTrue(filtered.indexOfHash(topic) < 0)
                 onNodeWithText("Flat view (content filters active)").assertExists()
 
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextReplacement("bogus:value")
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                session.applyQuery("bogus:value")
                 waitUntil(timeoutMillis = 20_000) {
                     state(manager).queryError != null
                 }
                 assertSame(filtered, state(manager).graph)
-                onNodeWithTag(UiTestTags.QUERY_ERROR).assertExists()
             } finally {
                 manager.close()
                 repo.close()

@@ -43,7 +43,6 @@ import androidx.compose.ui.platform.testTag
 import com.jmartinezcampos.freetree.app.ui.AppTheme
 import com.jmartinezcampos.freetree.app.ui.ChangesPanel
 import com.jmartinezcampos.freetree.app.ui.CommitPanel
-import com.jmartinezcampos.freetree.app.ui.FilterBar
 import com.jmartinezcampos.freetree.app.ui.GraphList
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
 import com.jmartinezcampos.freetree.app.ui.HistoryViewMode
@@ -159,8 +158,6 @@ private fun AppContent(
         )
         Divider()
         Toolbar(state = state, session = session)
-        Divider()
-        FilterBar(state = state, session = session)
         Divider()
 
         if (session == null) {

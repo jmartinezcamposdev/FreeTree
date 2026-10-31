@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,7 +39,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -51,6 +55,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import com.jmartinezcampos.freetree.core.model.GitRef
 import com.jmartinezcampos.freetree.core.model.RefKind
+import com.jmartinezcampos.freetree.core.query.parseQuery
 import com.jmartinezcampos.freetree.core.session.BusyOp
 import com.jmartinezcampos.freetree.core.session.RepoSession
 import com.jmartinezcampos.freetree.core.session.RepoUiState
@@ -225,83 +230,115 @@ internal fun Toolbar(
 ) {
     val colors = LocalGraphColors.current
     val busy = state.busy != null
-    Row(
+    val status = state.status
+    val branch = state.head?.branchShortName?.takeIf { it.isNotBlank() }
+        ?: status?.branchHead?.let(::abbreviateHash)
+        ?: "detached HEAD"
+    val counts = filterCounts(state)
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(GraphStyle.TOOLBAR_HEIGHT)
             .background(colors.surface)
             .testTag(UiTestTags.TOOLBAR)
             .padding(horizontal = GraphStyle.SPACE_MD),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
     ) {
-        ToolbarButton(
-            text = "⟳",
-            tag = UiTestTags.REFRESH,
-            enabled = session != null && !busy,
-            onClick = { session?.refresh() },
-        )
-        ToolbarButton(
-            text = "Pull",
-            tag = UiTestTags.PULL,
-            enabled = session != null && !busy,
-            onClick = { session?.pull() },
-        )
-        ToolbarButton(
-            text = "Push",
-            tag = UiTestTags.PUSH,
-            enabled = session != null && !busy,
-            onClick = { session?.push() },
-        )
-        Spacer(Modifier.width(GraphStyle.SPACE_MD))
-        val status = state.status
-        val branch = state.head?.branchShortName?.takeIf { it.isNotBlank() }
-            ?: status?.branchHead?.let(::abbreviateHash)
-            ?: "detached HEAD"
-        Text(
-            text = branch,
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.onSurface,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.testTag(UiTestTags.BRANCH_LABEL),
-        )
-        if (status != null) {
-            Spacer(Modifier.width(GraphStyle.SPACE_SM))
-            Text(
-                text = "↑${status.ahead} ↓${status.behind}",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceMuted,
+        Row(
+            modifier = Modifier.align(Alignment.CenterStart),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
+        ) {
+            ToolbarButton(
+                text = "Pull",
+                tag = UiTestTags.PULL,
+                iconTag = UiTestTags.PULL_ICON,
+                icon = { color, stroke -> drawPullIcon(color, stroke) },
+                enabled = session != null && !busy,
+                onClick = { session?.pull() },
             )
-        }
-        val operation = state.operationInProgress
-        if (operation != null) {
-            Spacer(Modifier.width(GraphStyle.SPACE_MD))
-            Text(
-                text = operation,
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.error,
+            ToolbarButton(
+                text = "Push",
+                tag = UiTestTags.PUSH,
+                iconTag = UiTestTags.PUSH_ICON,
+                icon = { color, stroke -> drawPushIcon(color, stroke) },
+                enabled = session != null && !busy,
+                onClick = { session?.push() },
             )
-        }
-        Spacer(Modifier.weight(GraphStyle.FILL_WEIGHT))
-        if (busy) {
-            CircularProgressIndicator(
-                modifier = Modifier
-                    .size(GraphStyle.BUSY_INDICATOR_SIZE)
-                    .testTag(UiTestTags.BUSY_INDICATOR),
-                color = colors.primary,
-                strokeWidth = GraphStyle.STROKE_WIDTH,
-            )
-        }
-        if (state.busy != null) {
-            Spacer(Modifier.width(GraphStyle.SPACE_SM))
-            val currentBusy = state.busy
-            if (currentBusy != null) {
+            if (status != null) {
+                Spacer(Modifier.width(GraphStyle.SPACE_XS))
                 Text(
-                    text = busyLabel(currentBusy),
+                    text = "↑${status.ahead} ↓${status.behind}",
                     style = MaterialTheme.typography.bodySmall,
                     color = colors.onSurfaceMuted,
+                    modifier = Modifier.testTag(UiTestTags.AHEAD_BEHIND),
                 )
             }
+            val operation = state.operationInProgress
+            if (operation != null) {
+                Spacer(Modifier.width(GraphStyle.SPACE_XS))
+                Text(
+                    text = operation,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.error,
+                )
+            }
+        }
+
+        ToolbarButton(
+            text = branch,
+            tag = UiTestTags.BRANCH_BUTTON,
+            iconTag = UiTestTags.BRANCH_ICON,
+            icon = { color, stroke -> drawBranchIcon(color, stroke) },
+            enabled = session != null,
+            onClick = {},
+            textTag = UiTestTags.BRANCH_LABEL,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .widthIn(max = GraphStyle.TOOLBAR_BRANCH_MAX_WIDTH),
+        )
+
+        Row(
+            modifier = Modifier.align(Alignment.CenterEnd),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
+        ) {
+            if (busy) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(GraphStyle.BUSY_INDICATOR_SIZE)
+                        .testTag(UiTestTags.BUSY_INDICATOR),
+                    color = colors.primary,
+                    strokeWidth = GraphStyle.STROKE_WIDTH,
+                )
+                val currentBusy = state.busy
+                if (currentBusy != null) {
+                    Text(
+                        text = busyLabel(currentBusy),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceMuted,
+                    )
+                }
+            }
+            ToolbarButton(
+                text = "Filters",
+                tag = UiTestTags.FILTERS_BUTTON,
+                iconTag = UiTestTags.FILTERS_ICON,
+                icon = { color, stroke -> drawFiltersIcon(color, stroke) },
+                enabled = session != null,
+                onClick = {},
+            )
+            FilterCountBadge(
+                label = "Branches",
+                count = counts.branch,
+                tag = UiTestTags.FILTERS_BRANCH_COUNT,
+            )
+            FilterCountBadge(
+                label = "Other",
+                count = counts.other,
+                tag = UiTestTags.FILTERS_OTHER_COUNT,
+            )
         }
     }
 }
@@ -314,22 +351,201 @@ private fun busyLabel(op: BusyOp): String = when (op) {
     BusyOp.PULL -> "Pulling…"
 }
 
+internal data class FilterCounts(
+    val branch: Int,
+    val other: Int,
+)
+
+internal fun filterCounts(state: RepoUiState): FilterCounts {
+    val query = parseQuery(state.query).getOrNull()
+    val branch = (query?.refIncludes?.size ?: 0) +
+        (query?.refExcludes?.size ?: 0) +
+        state.hiddenRefs.size
+    val other = listOfNotNull(
+        query?.author,
+        query?.grep,
+        query?.since,
+        query?.until,
+        query?.path,
+    ).size
+    return FilterCounts(branch = branch, other = other)
+}
+
 @Composable
 private fun ToolbarButton(
     text: String,
     tag: String,
+    iconTag: String,
+    icon: DrawScope.(Color, Float) -> Unit,
     enabled: Boolean,
     onClick: () -> Unit,
+    textTag: String? = null,
+    fontWeight: FontWeight = FontWeight.Medium,
+    modifier: Modifier = Modifier,
 ) {
-    TextButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = Modifier
-            .height(GraphStyle.CONTROL_HEIGHT)
-            .testTag(tag),
-    ) {
-        Text(text = text, style = MaterialTheme.typography.bodyMedium)
+    val colors = LocalGraphColors.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val shape = RoundedCornerShape(GraphStyle.TOOLBAR_BUTTON_CORNER_RADIUS)
+    val background = when {
+        !enabled -> colors.surface
+        hovered -> colors.primary.copy(alpha = 0.14f)
+        else -> colors.surfaceRaised
     }
+    val contentColor = if (enabled) colors.onSurface else colors.onSurfaceMuted
+    Row(
+        modifier = modifier
+            .height(GraphStyle.CONTROL_HEIGHT)
+            .clip(shape)
+            .background(background)
+            .hoverable(interactionSource)
+            .testTag(tag)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = ripple(),
+                onClick = onClick,
+            )
+            .padding(horizontal = GraphStyle.SPACE_SM),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
+    ) {
+        Canvas(
+            modifier = Modifier
+                .size(GraphStyle.TOOLBAR_ICON_SIZE)
+                .testTag(iconTag),
+        ) {
+            icon(contentColor, GraphStyle.TOOLBAR_ICON_STROKE.toPx())
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = fontWeight,
+            color = contentColor,
+            maxLines = GraphStyle.MAX_TEXT_LINES,
+            overflow = TextOverflow.Ellipsis,
+            modifier = if (textTag != null) Modifier.testTag(textTag) else Modifier,
+        )
+    }
+}
+
+@Composable
+private fun FilterCountBadge(
+    label: String,
+    count: Int,
+    tag: String,
+) {
+    val colors = LocalGraphColors.current
+    Text(
+        text = "$label $count",
+        style = MaterialTheme.typography.bodySmall,
+        color = if (count > 0) colors.onSurface else colors.onSurfaceMuted,
+        maxLines = GraphStyle.MAX_TEXT_LINES,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .clip(RoundedCornerShape(GraphStyle.CHIP_CORNER_RADIUS))
+            .background(colors.surfaceRaised)
+            .padding(horizontal = GraphStyle.SPACE_SM, vertical = GraphStyle.SPACE_XXS)
+            .testTag(tag),
+    )
+}
+
+private fun DrawScope.drawPullIcon(
+    color: Color,
+    stroke: Float,
+) {
+    val cx = size.width / 2f
+    val headY = size.height * 0.62f
+    drawLine(color, Offset(cx, size.height * 0.08f), Offset(cx, headY), stroke, StrokeCap.Round)
+    drawLine(
+        color,
+        Offset(cx - size.width * 0.24f, headY - size.height * 0.22f),
+        Offset(cx, headY),
+        stroke,
+        StrokeCap.Round,
+    )
+    drawLine(
+        color,
+        Offset(cx + size.width * 0.24f, headY - size.height * 0.22f),
+        Offset(cx, headY),
+        stroke,
+        StrokeCap.Round,
+    )
+    drawLine(
+        color,
+        Offset(size.width * 0.16f, size.height * 0.88f),
+        Offset(size.width * 0.84f, size.height * 0.88f),
+        stroke,
+        StrokeCap.Round,
+    )
+}
+
+private fun DrawScope.drawPushIcon(
+    color: Color,
+    stroke: Float,
+) {
+    val cx = size.width / 2f
+    val headY = size.height * 0.38f
+    drawLine(color, Offset(cx, size.height * 0.92f), Offset(cx, headY), stroke, StrokeCap.Round)
+    drawLine(
+        color,
+        Offset(cx - size.width * 0.24f, headY + size.height * 0.22f),
+        Offset(cx, headY),
+        stroke,
+        StrokeCap.Round,
+    )
+    drawLine(
+        color,
+        Offset(cx + size.width * 0.24f, headY + size.height * 0.22f),
+        Offset(cx, headY),
+        stroke,
+        StrokeCap.Round,
+    )
+    drawLine(
+        color,
+        Offset(size.width * 0.16f, size.height * 0.12f),
+        Offset(size.width * 0.84f, size.height * 0.12f),
+        stroke,
+        StrokeCap.Round,
+    )
+}
+
+private fun DrawScope.drawBranchIcon(
+    color: Color,
+    stroke: Float,
+) {
+    val trunkX = size.width * 0.24f
+    val topY = size.height * 0.16f
+    val midY = size.height * 0.46f
+    val bottomY = size.height * 0.84f
+    val branchX = size.width * 0.76f
+    val branchY = size.height * 0.34f
+    drawLine(color, Offset(trunkX, topY), Offset(trunkX, bottomY), stroke, StrokeCap.Round)
+    val path = Path().apply {
+        moveTo(trunkX, midY)
+        cubicTo(trunkX + size.width * 0.18f, midY, branchX - size.width * 0.18f, branchY, branchX, branchY)
+    }
+    drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round))
+    val nodeStyle = Stroke(width = stroke)
+    drawCircle(color, radius = size.width * 0.12f, center = Offset(trunkX, topY), style = nodeStyle)
+    drawCircle(color, radius = size.width * 0.12f, center = Offset(trunkX, bottomY), style = nodeStyle)
+    drawCircle(color, radius = size.width * 0.12f, center = Offset(branchX, branchY), style = nodeStyle)
+}
+
+private fun DrawScope.drawFiltersIcon(
+    color: Color,
+    stroke: Float,
+) {
+    val path = Path().apply {
+        moveTo(size.width * 0.12f, size.height * 0.16f)
+        lineTo(size.width * 0.88f, size.height * 0.16f)
+        lineTo(size.width * 0.60f, size.height * 0.52f)
+        lineTo(size.width * 0.60f, size.height * 0.86f)
+        lineTo(size.width * 0.40f, size.height * 0.74f)
+        lineTo(size.width * 0.40f, size.height * 0.52f)
+        close()
+    }
+    drawPath(path, color, style = Stroke(width = stroke, cap = StrokeCap.Round))
 }
 
 @Composable

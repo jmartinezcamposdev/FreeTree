@@ -10,7 +10,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
@@ -266,38 +265,28 @@ class Phase2SmokeTest {
                 setContent { App(app.manager) }
                 awaitGraph(app)
 
-                onNodeWithTag(UiTestTags.REFS_TOGGLE).performClick()
-                onNodeWithTag(UiTestTags.REFS_PANEL).assertExists()
-                onNodeWithTag(UiTestTags.refItem("refs/heads/topic")).performClick()
+                val session = app.manager.activeSession.value!!
+                session.toggleRef("refs/heads/topic")
                 waitUntil(timeoutMillis = 5_000) {
-                    "refs/heads/topic" in app.manager.activeSession.value!!.state.value.hiddenRefs
+                    "refs/heads/topic" in session.state.value.hiddenRefs
                 }
 
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextInput("author:Ada")
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                session.applyQuery("author:Ada")
                 waitUntil(timeoutMillis = 5_000) {
-                    val state = app.manager.activeSession.value?.state?.value
-                    state?.query == "author:Ada" && state.graph?.flat == true
+                    session.state.value.query == "author:Ada" && session.state.value.graph?.flat == true
                 }
                 onNodeWithText("Flat view (content filters active)").assertExists()
-                onNodeWithTag(UiTestTags.QUERY_ERROR).assertDoesNotExist()
+                assertNull(session.state.value.queryError)
+                onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).assertTextContains("Branches 1")
+                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertTextContains("Other 1")
                 saveScreenshot("04-refs-query.png")
 
-                val stableGraph = app.manager.activeSession.value!!.state.value.graph
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextClearance()
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextInput("bogus:value")
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                val stableGraph = session.state.value.graph
+                session.applyQuery("bogus:value")
                 waitUntil(timeoutMillis = 5_000) {
-                    app.manager.activeSession.value?.state?.value?.queryError != null
+                    session.state.value.queryError != null
                 }
-                onNodeWithTag(UiTestTags.QUERY_ERROR).assertExists()
-                assertSame(stableGraph, app.manager.activeSession.value!!.state.value.graph)
+                assertSame(stableGraph, session.state.value.graph)
                 saveScreenshot("04b-query-error.png")
             } finally {
                 app.close()
@@ -315,11 +304,7 @@ class Phase2SmokeTest {
                 val alpha = app.manager.session(alphaId)!!
                 val alphaSelection = scenario.commits[4].hash
 
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextInput("author:Ada")
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                alpha.applyQuery("author:Ada")
                 waitUntil(timeoutMillis = 5_000) { alpha.state.value.query == "author:Ada" }
                 onNodeWithTag(UiTestTags.commitRowForHash(alphaSelection)).performClick()
                 waitUntil(timeoutMillis = 5_000) {
@@ -333,12 +318,7 @@ class Phase2SmokeTest {
                 }
                 val beta = app.manager.activeSession.value!!
                 waitUntil(timeoutMillis = 5_000) { beta.state.value.graph != null }
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextClearance()
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextInput("msg:Merge")
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                beta.applyQuery("msg:Merge")
                 waitUntil(timeoutMillis = 5_000) { beta.state.value.query == "msg:Merge" }
                 onNodeWithTag(UiTestTags.CHANGES_ROW).performClick()
                 waitUntil(timeoutMillis = 5_000) {
@@ -391,9 +371,9 @@ class Phase2SmokeTest {
                 waitUntil(timeoutMillis = 5_000) {
                     app.manager.tabs.value.size == 2 && app.manager.activeId.value != firstId
                 }
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performClick()
+                onNodeWithTag(UiTestTags.GRAPH_LIST).requestFocus()
                 waitForIdle()
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
+                onNodeWithTag(UiTestTags.GRAPH_LIST).performKeyInput {
                     keyDown(Key.CtrlLeft)
                     keyDown(Key.Tab)
                     keyUp(Key.Tab)
@@ -403,7 +383,7 @@ class Phase2SmokeTest {
                 assertExclusiveActive(app)
                 assertEquals(Selection.Commit(mergeHash), app.manager.activeSession.value!!.state.value.selection)
 
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
+                onNodeWithTag(UiTestTags.GRAPH_LIST).performKeyInput {
                     keyDown(Key.CtrlLeft)
                     keyDown(Key.Tab)
                     keyUp(Key.Tab)

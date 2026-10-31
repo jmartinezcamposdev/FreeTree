@@ -122,7 +122,7 @@ class RealRepositoryUiTest {
                 onNodeWithText("Working tree clean").assertExists()
 
                 repo.writeFile("README.md", "line one\nrefresh me\n")
-                onNodeWithTag(UiTestTags.REFRESH).performClick()
+                manager.activeSession.value!!.refresh()
                 awaitStatus(manager) { entry ->
                     entry.path == "README.md" && entry.worktree == 'M'
                 }
