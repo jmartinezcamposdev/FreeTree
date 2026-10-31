@@ -4,6 +4,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -25,6 +26,7 @@ import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class AppShellUiTest {
@@ -73,8 +75,8 @@ class AppShellUiTest {
                 onNodeWithTag(UiTestTags.FILTERS_BUTTON).assertExists()
                 onNodeWithTag(UiTestTags.FILTERS_BUTTON).assertHasClickAction()
                 onNodeWithTag(UiTestTags.FILTERS_ICON, useUnmergedTree = true).assertExists()
-                onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).assertTextContains("Branches 0")
-                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertTextContains("Other 0")
+                onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertDoesNotExist()
                 onNodeWithText("↑1 ↓2").assertExists()
 
                 fixture.backend.clearCalls()
@@ -114,13 +116,29 @@ class AppShellUiTest {
                     "refs/heads/main" in session.state.value.hiddenRefs
                 }
                 onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).assertTextContains("Branches 1")
+                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertDoesNotExist()
 
                 session.applyQuery("author:Ada")
                 waitUntil(timeoutMillis = 5_000) {
                     session.state.value.query == "author:Ada" && session.state.value.queryError == null
                 }
                 onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertTextContains("Other 1")
+
+                val branches = onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).getUnclippedBoundsInRoot()
+                val other = onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).getUnclippedBoundsInRoot()
+                val filters = onNodeWithTag(UiTestTags.FILTERS_BUTTON).getUnclippedBoundsInRoot()
+                assertTrue(
+                    branches.right < other.left && other.right < filters.left,
+                    "expected indicators before Filters: branches=$branches other=$other filters=$filters",
+                )
                 saveScreenshot("19-toolbar.png")
+
+                session.toggleRef("refs/heads/main")
+                waitUntil(timeoutMillis = 5_000) {
+                    "refs/heads/main" !in session.state.value.hiddenRefs
+                }
+                onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertTextContains("Other 1")
             } finally {
                 fixture.close()
             }

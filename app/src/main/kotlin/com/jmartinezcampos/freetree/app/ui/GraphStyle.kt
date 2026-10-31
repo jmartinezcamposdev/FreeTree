@@ -138,6 +138,9 @@ object GraphStyle {
     const val SCROLLBAR_HIDE_DELAY_MILLIS: Long = 900L
     const val SCROLLBAR_FADE_MILLIS: Int = 160
     val TOOLBAR_HEIGHT: Dp = 36.dp
+    val TOOLBAR_HORIZONTAL_PADDING: Dp = 12.dp
+    val TOOLBAR_BUTTON_GAP: Dp = 8.dp
+    val TOOLBAR_STATUS_GAP: Dp = 12.dp
     val TOOLBAR_BUTTON_CORNER_RADIUS: Dp = 8.dp
     val TOOLBAR_ICON_SIZE: Dp = 12.dp
     val TOOLBAR_ICON_STROKE: Dp = 1.4.dp

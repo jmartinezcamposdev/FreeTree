@@ -242,12 +242,11 @@ internal fun Toolbar(
             .height(GraphStyle.TOOLBAR_HEIGHT)
             .background(colors.surface)
             .testTag(UiTestTags.TOOLBAR)
-            .padding(horizontal = GraphStyle.SPACE_MD),
+            .padding(horizontal = GraphStyle.TOOLBAR_HORIZONTAL_PADDING),
     ) {
         Row(
             modifier = Modifier.align(Alignment.CenterStart),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
         ) {
             ToolbarButton(
                 text = "Pull",
@@ -257,6 +256,7 @@ internal fun Toolbar(
                 enabled = session != null && !busy,
                 onClick = { session?.pull() },
             )
+            Spacer(Modifier.width(GraphStyle.TOOLBAR_BUTTON_GAP))
             ToolbarButton(
                 text = "Push",
                 tag = UiTestTags.PUSH,
@@ -266,7 +266,7 @@ internal fun Toolbar(
                 onClick = { session?.push() },
             )
             if (status != null) {
-                Spacer(Modifier.width(GraphStyle.SPACE_XS))
+                Spacer(Modifier.width(GraphStyle.TOOLBAR_STATUS_GAP))
                 Text(
                     text = "↑${status.ahead} ↓${status.behind}",
                     style = MaterialTheme.typography.bodySmall,
@@ -274,9 +274,32 @@ internal fun Toolbar(
                     modifier = Modifier.testTag(UiTestTags.AHEAD_BEHIND),
                 )
             }
+            if (busy) {
+                Spacer(Modifier.width(GraphStyle.TOOLBAR_STATUS_GAP))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(GraphStyle.BUSY_INDICATOR_SIZE)
+                            .testTag(UiTestTags.BUSY_INDICATOR),
+                        color = colors.primary,
+                        strokeWidth = GraphStyle.STROKE_WIDTH,
+                    )
+                    val currentBusy = state.busy
+                    if (currentBusy != null) {
+                        Text(
+                            text = busyLabel(currentBusy),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceMuted,
+                        )
+                    }
+                }
+            }
             val operation = state.operationInProgress
             if (operation != null) {
-                Spacer(Modifier.width(GraphStyle.SPACE_XS))
+                Spacer(Modifier.width(GraphStyle.TOOLBAR_STATUS_GAP))
                 Text(
                     text = operation,
                     style = MaterialTheme.typography.bodySmall,
@@ -304,22 +327,19 @@ internal fun Toolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
         ) {
-            if (busy) {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .size(GraphStyle.BUSY_INDICATOR_SIZE)
-                        .testTag(UiTestTags.BUSY_INDICATOR),
-                    color = colors.primary,
-                    strokeWidth = GraphStyle.STROKE_WIDTH,
+            if (counts.branch > 0) {
+                FilterCountBadge(
+                    label = "Branches",
+                    count = counts.branch,
+                    tag = UiTestTags.FILTERS_BRANCH_COUNT,
                 )
-                val currentBusy = state.busy
-                if (currentBusy != null) {
-                    Text(
-                        text = busyLabel(currentBusy),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceMuted,
-                    )
-                }
+            }
+            if (counts.other > 0) {
+                FilterCountBadge(
+                    label = "Other",
+                    count = counts.other,
+                    tag = UiTestTags.FILTERS_OTHER_COUNT,
+                )
             }
             ToolbarButton(
                 text = "Filters",
@@ -328,16 +348,6 @@ internal fun Toolbar(
                 icon = { color, stroke -> drawFiltersIcon(color, stroke) },
                 enabled = session != null,
                 onClick = {},
-            )
-            FilterCountBadge(
-                label = "Branches",
-                count = counts.branch,
-                tag = UiTestTags.FILTERS_BRANCH_COUNT,
-            )
-            FilterCountBadge(
-                label = "Other",
-                count = counts.other,
-                tag = UiTestTags.FILTERS_OTHER_COUNT,
             )
         }
     }
