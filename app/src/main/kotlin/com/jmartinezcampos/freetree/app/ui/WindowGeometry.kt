@@ -1,14 +1,14 @@
 package com.jmartinezcampos.freetree.app.ui
 
+import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.window.WindowState
 import java.awt.GraphicsEnvironment
 import java.awt.HeadlessException
 import java.awt.Toolkit
-import java.util.prefs.BackingStoreException
-import java.util.prefs.Preferences
 import kotlin.math.roundToInt
-import androidx.compose.ui.window.WindowState
-import androidx.compose.ui.unit.isSpecified
+import kotlinx.serialization.Serializable
 
+@Serializable
 internal data class WindowBounds(
     val x: Int,
     val y: Int,
@@ -27,90 +27,12 @@ internal data class DesktopScreens(
     val primaryId: String?,
 )
 
+@Serializable
 internal data class SavedWindowState(
     val bounds: WindowBounds,
     val monitorId: String,
     val monitorBounds: WindowBounds,
 )
-
-internal interface WindowPreferences {
-    fun load(): SavedWindowState?
-    fun save(state: SavedWindowState)
-}
-
-internal class PreferencesWindowPreferences(
-    private val preferences: Preferences = Preferences.userRoot()
-        .node("com/jmartinezcampos/freetree"),
-) : WindowPreferences {
-    override fun load(): SavedWindowState? {
-        return try {
-            val width = int(KEY_WIDTH) ?: return null
-            val height = int(KEY_HEIGHT) ?: return null
-            val monitorWidth = int(KEY_MONITOR_WIDTH) ?: return null
-            val monitorHeight = int(KEY_MONITOR_HEIGHT) ?: return null
-            val monitorId = preferences.get(KEY_MONITOR_ID, null) ?: return null
-            val state = SavedWindowState(
-                bounds = WindowBounds(
-                    x = int(KEY_X) ?: return null,
-                    y = int(KEY_Y) ?: return null,
-                    width = width,
-                    height = height,
-                ),
-                monitorId = monitorId,
-                monitorBounds = WindowBounds(
-                    x = int(KEY_MONITOR_X) ?: return null,
-                    y = int(KEY_MONITOR_Y) ?: return null,
-                    width = monitorWidth,
-                    height = monitorHeight,
-                ),
-            )
-            if (state.bounds.width <= 0 || state.bounds.height <= 0) return null
-            if (state.monitorBounds.width <= 0 || state.monitorBounds.height <= 0) return null
-            state
-        } catch (e: SecurityException) {
-            System.err.println("FreeTree: cannot read the window position: ${e.message}")
-            null
-        }
-    }
-
-    override fun save(state: SavedWindowState) {
-        try {
-            putInt(KEY_X, state.bounds.x)
-            putInt(KEY_Y, state.bounds.y)
-            putInt(KEY_WIDTH, state.bounds.width)
-            putInt(KEY_HEIGHT, state.bounds.height)
-            preferences.put(KEY_MONITOR_ID, state.monitorId)
-            putInt(KEY_MONITOR_X, state.monitorBounds.x)
-            putInt(KEY_MONITOR_Y, state.monitorBounds.y)
-            putInt(KEY_MONITOR_WIDTH, state.monitorBounds.width)
-            putInt(KEY_MONITOR_HEIGHT, state.monitorBounds.height)
-            preferences.flush()
-        } catch (e: BackingStoreException) {
-            System.err.println("FreeTree: cannot save the window position: ${e.message}")
-        } catch (e: SecurityException) {
-            System.err.println("FreeTree: cannot save the window position: ${e.message}")
-        }
-    }
-
-    private fun int(key: String): Int? =
-        preferences.get(key, null)?.toIntOrNull()
-
-    private fun putInt(key: String, value: Int) {
-        preferences.put(key, value.toString())
-    }
-
-    private companion object {
-        const val KEY_X = "windowX"
-        const val KEY_Y = "windowY"
-        const val KEY_WIDTH = "windowWidth"
-        const val KEY_HEIGHT = "windowHeight"
-        const val KEY_MONITOR_ID = "windowMonitorId"
-        const val KEY_MONITOR_X = "windowMonitorX"
-        const val KEY_MONITOR_Y = "windowMonitorY"
-        const val KEY_MONITOR_WIDTH = "windowMonitorWidth"
-        const val KEY_MONITOR_HEIGHT = "windowMonitorHeight"
-    }
-}
 
 internal fun readDesktopScreens(): DesktopScreens {
     return try {

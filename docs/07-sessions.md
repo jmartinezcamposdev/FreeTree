@@ -41,9 +41,13 @@ Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
 ## Tabs and persistence
 
 - `SessionManager` persists `TabState` and the active tab to:
-  - macOS: `~/Library/Application Support/FreeTree/state.json`
-  - Linux: `~/.config/freetree/state.json`
-  - Windows: `%APPDATA%\FreeTree\state.json`
+  - macOS: `~/Library/Application Support/FreeTree/session.json`
+  - Linux: `~/.config/freetree/session.json`
+  - Windows: `%APPDATA%\FreeTree\session.json`
+- Global preferences, window geometry, panel splits, and recent repositories live in
+  `preferences.json` in the same application-data directory.
+- Both files are versioned JSON documents written atomically through the shared `JsonFileStore`.
+  The previous `state.json` and Java `Preferences` values are migrated automatically on first run.
 - Restore tabs without loading them; load only the active one. Missing paths become “unavailable”.
 - Opening the same repository twice activates the existing tab.
 - Inactive tabs keep their last snapshot (about 80 MB for 200k commits). Accepted for MVP; add a cap

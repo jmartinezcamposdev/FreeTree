@@ -1,7 +1,5 @@
 package com.jmartinezcampos.freetree.app.ui
 
-import java.util.UUID
-import java.util.prefs.Preferences
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPosition
@@ -10,56 +8,13 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-class WindowPreferencesTest {
+class WindowGeometryTest {
 
     private val display = ScreenArea(
         id = "Display 1",
         bounds = WindowBounds(0, 0, 1512, 982),
         workArea = WindowBounds(0, 38, 1441, 944),
     )
-
-    @Test
-    fun windowPreferencesRoundTrip() {
-        val node = Preferences.userRoot().node("freetree-window-test-${UUID.randomUUID()}")
-        try {
-            val preferences = PreferencesWindowPreferences(node)
-            assertNull(preferences.load())
-
-            val saved = SavedWindowState(
-                bounds = WindowBounds(120, 160, 900, 640),
-                monitorId = "Display 1",
-                monitorBounds = WindowBounds(0, 0, 1512, 982),
-            )
-            preferences.save(saved)
-
-            assertEquals(saved, preferences.load())
-        } finally {
-            node.removeNode()
-        }
-    }
-
-    @Test
-    fun missingOrCorruptWindowPreferencesReturnNull() {
-        val node = Preferences.userRoot().node("freetree-window-test-${UUID.randomUUID()}")
-        try {
-            val preferences = PreferencesWindowPreferences(node)
-            node.put("windowX", "not-a-number")
-            assertNull(preferences.load())
-
-            node.put("windowX", "10")
-            node.put("windowY", "20")
-            node.put("windowWidth", "800")
-            node.put("windowHeight", "600")
-            node.put("windowMonitorId", "Display 1")
-            node.put("windowMonitorX", "0")
-            node.put("windowMonitorY", "0")
-            node.put("windowMonitorWidth", "0")
-            node.put("windowMonitorHeight", "982")
-            assertNull(preferences.load())
-        } finally {
-            node.removeNode()
-        }
-    }
 
     @Test
     fun noSavedStateOpensCenteredAtDefaultSize() {

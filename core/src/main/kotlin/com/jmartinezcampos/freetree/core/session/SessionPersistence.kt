@@ -1,13 +1,16 @@
 package com.jmartinezcampos.freetree.core.session
 
-import java.nio.charset.StandardCharsets
+import com.jmartinezcampos.freetree.core.persistence.AppDataPaths
+import com.jmartinezcampos.freetree.core.persistence.JsonFileStore
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+
+private const val CURRENT_SESSION_SCHEMA_VERSION = 1
 
 @Serializable
 data class PersistedSessionState(
+    val schemaVersion: Int = CURRENT_SESSION_SCHEMA_VERSION,
     val tabs: List<TabState> = emptyList(),
     val activeId: String? = null,
 )
@@ -17,29 +20,26 @@ interface SessionPersistence {
     fun save(state: PersistedSessionState)
 }
 
-class JsonSessionPersistence(val file: Path) : SessionPersistence {
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        prettyPrint = true
-    }
+class JsonSessionPersistence(
+    val file: Path,
+    private val legacyFile: Path? = null,
+) : SessionPersistence {
+    private val store = JsonFileStore(file, PersistedSessionState.serializer())
 
     override fun load(): PersistedSessionState? {
-        if (!Files.exists(file)) return null
-        val text = Files.readString(file, StandardCharsets.UTF_8)
-        return json.decodeFromString(PersistedSessionState.serializer(), text)
+        val current = store.load()
+        if (current != null) return current
+
+        val legacy = legacyFile
+            ?.takeIf { Files.exists(it) }
+            ?.let { JsonFileStore(it, PersistedSessionState.serializer()).load() }
+            ?: return null
+        store.save(legacy)
+        return legacy
     }
 
     override fun save(state: PersistedSessionState) {
-        val parent = file.toAbsolutePath().parent
-        Files.createDirectories(parent)
-        val temporary = Files.createTempFile(parent, "state", ".json.tmp")
-        try {
-            Files.writeString(temporary, json.encodeToString(PersistedSessionState.serializer(), state), StandardCharsets.UTF_8)
-            Files.move(temporary, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-        } finally {
-            Files.deleteIfExists(temporary)
-        }
+        store.save(state)
     }
 }
 
@@ -55,20 +55,6 @@ class InMemorySessionPersistence(initial: PersistedSessionState? = null) : Sessi
     }
 }
 
-fun defaultSessionStatePath(): Path {
-    val home = Path.of(System.getProperty("user.home"))
-    val os = System.getProperty("os.name").lowercase()
-    return when {
-        os.contains("mac") -> home.resolve("Library/Application Support/FreeTree/state.json")
-        os.contains("win") -> {
-            val appData = System.getenv("APPDATA")?.takeIf { it.isNotBlank() }?.let(Path::of)
-                ?: home.resolve("AppData/Roaming")
-            appData.resolve("FreeTree/state.json")
-        }
-        else -> {
-            val config = System.getenv("XDG_CONFIG_HOME")?.takeIf { it.isNotBlank() }?.let(Path::of)
-                ?: home.resolve(".config")
-            config.resolve("freetree/state.json")
-        }
-    }
-}
+fun defaultSessionStatePath(): Path = AppDataPaths.sessionFile()
+
+fun defaultLegacySessionStatePath(): Path = AppDataPaths.legacySessionFile()
