@@ -227,7 +227,8 @@ class SessionManagerTest {
         assertEquals(1, first.peakConcurrentWrites)
         assertEquals(SessionPhase.INACTIVE, firstSession.phase.value)
         assertNull(firstSession.state.value.busy)
-        assertTrue(firstSession.state.value.message is UserMessage.Info)
+        assertNull(firstSession.state.value.message)
+        assertTrue(manager.messageLog.entries.value.any { it.level == MessageLevel.INFO })
         assertTrue(first.callsOf(FakeMethod.STATUS).isNotEmpty())
         assertTrue(first.callsOf(FakeMethod.REFS).isNotEmpty())
         manager.close()
@@ -579,7 +580,8 @@ class SessionManagerTest {
         assertNull(manager.session(firstId))
         assertEquals(SessionPhase.INACTIVE, firstSession.phase.value)
         assertNull(firstSession.state.value.graph)
-        assertTrue(firstSession.state.value.message is UserMessage.Info)
+        assertNull(firstSession.state.value.message)
+        assertEquals(MessageLevel.INFO, manager.messageLog.entries.value.last().level)
         manager.close()
     }
 

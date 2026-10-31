@@ -19,4 +19,6 @@ internal sealed interface AppCommand {
     data object PreviousTab : AppCommand
     data object Minimize : AppCommand
     data object About : AppCommand
+    data object MessagesLog : AppCommand
+    data object Preferences : AppCommand
 }

@@ -19,6 +19,7 @@ import com.jmartinezcampos.freetree.app.ui.UiTestTags
 import com.jmartinezcampos.freetree.core.model.GitResult
 import com.jmartinezcampos.freetree.core.model.StatusEntry
 import com.jmartinezcampos.freetree.core.model.WorkingStatus
+import com.jmartinezcampos.freetree.core.session.MessageLevel
 import com.jmartinezcampos.freetree.core.session.Selection
 import com.jmartinezcampos.freetree.core.session.SessionPhase
 import com.jmartinezcampos.freetree.core.session.UserMessage
@@ -202,7 +203,8 @@ class Phase2SmokeTest {
 
                 val state = app.manager.activeSession.value!!.state.value
                 assertEquals("Commit from smoke", backend.callsOf(FakeMethod.COMMIT).single().message)
-                assertTrue(state.message is UserMessage.Info)
+                assertNull(state.message)
+                assertTrue(app.manager.messageLog.entries.value.any { it.text == "Commit created." })
                 assertTrue(state.status!!.entries.isEmpty())
                 assertTrue(state.head!!.commit != mergeHash)
                 assertEquals(state.head!!.commit, backend.head.commit)
@@ -228,7 +230,11 @@ class Phase2SmokeTest {
                 backend.callCount(FakeMethod.PUSH) == 1 &&
                     app.manager.activeSession.value?.state?.value?.busy == null
             }
-            onNodeWithText("Everything up-to-date").assertExists()
+            assertNull(app.manager.activeSession.value?.state?.value?.message)
+            assertTrue(
+                app.manager.messageLog.entries.value.any { it.text == "Everything up-to-date" },
+            )
+            onNodeWithTag(UiTestTags.MESSAGE_BAR).assertDoesNotExist()
 
             onNodeWithTag(UiTestTags.PULL).performClick()
             waitUntil(timeoutMillis = 5_000) {
@@ -237,6 +243,12 @@ class Phase2SmokeTest {
             }
             val message = app.manager.activeSession.value!!.state.value.message
             assertTrue(message is UserMessage.Error)
+            assertTrue(
+                app.manager.messageLog.entries.value.any {
+                    it.level == MessageLevel.ERROR &&
+                        it.stderr == "fatal: no tracking information"
+                },
+            )
             onNodeWithTag(UiTestTags.MESSAGE_BAR).assertExists()
             onNodeWithTag(UiTestTags.MESSAGE_STDERR)
                 .assertTextContains("fatal: no tracking information")

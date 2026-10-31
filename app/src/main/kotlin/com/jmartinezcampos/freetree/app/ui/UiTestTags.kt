@@ -61,6 +61,19 @@ object UiTestTags {
     const val DISCARD_CONFIRM = "discard-confirm"
     const val DISCARD_CANCEL = "discard-cancel"
 
+    const val MESSAGES_WINDOW = "messages-window"
+    const val MESSAGES_LIST = "messages-list"
+    const val MESSAGES_EMPTY = "messages-empty"
+
+    const val PREFERENCES_WINDOW = "preferences-window"
+    const val THEME_SYSTEM = "theme-system"
+    const val THEME_LIGHT = "theme-light"
+    const val THEME_DARK = "theme-dark"
+
+    fun messageLogRow(id: Long) = "message-log-row-$id"
+    fun messageLogCopy(id: Long) = "message-log-copy-$id"
+    fun messageLogToggle(id: Long) = "message-log-toggle-$id"
+
     fun tab(index: Int) = "tab-$index"
     fun tabClose(index: Int) = "tab-close-$index"
     fun tabCloseIcon(index: Int) = "tab-close-icon-$index"

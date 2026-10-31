@@ -451,7 +451,8 @@ class RepoSessionTest {
         assertEquals(1, backend.callCount(FakeMethod.PULL))
         assertEquals(1, backend.peakConcurrentWrites)
         assertNull(session.state.value.busy)
-        assertTrue(session.state.value.message is UserMessage.Info)
+        assertNull(session.state.value.message)
+        assertTrue(session.messageLog.entries.value.takeLast(2).all { it.level == MessageLevel.INFO })
         session.close()
     }
 
@@ -550,7 +551,9 @@ class RepoSessionTest {
         advanceUntilIdle()
         assertEquals(1, backend.callCount(FakeMethod.COMMIT))
         assertEquals("message", backend.callsOf(FakeMethod.COMMIT).single().message)
-        assertTrue(session.state.value.message is UserMessage.Info)
+        assertNull(session.state.value.message)
+        assertEquals(MessageLevel.INFO, session.lastLog().level)
+        assertEquals("Commit created.", session.lastLog().text)
         session.close()
     }
 
@@ -610,7 +613,8 @@ class RepoSessionTest {
         assertEquals(backend.refs, session.state.value.refs)
         assertEquals(backend.head, session.state.value.head)
         assertEquals(SessionPhase.ACTIVE, session.phase.value)
-        assertTrue(session.state.value.message is UserMessage.Info)
+        assertNull(session.state.value.message)
+        assertEquals(MessageLevel.INFO, session.lastLog().level)
         session.close()
     }
 
@@ -758,6 +762,8 @@ class RepoSessionTest {
             clockMillis = { testScheduler.currentTime },
         )
     }
+
+    private fun RepoSession.lastLog(): MessageLogEntry = messageLog.entries.value.last()
 
     private class ThrowingWatcher : RepoWatcher {
         var startAttempts = 0

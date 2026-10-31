@@ -26,6 +26,7 @@ class SessionManager(
     private val readDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val writeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val clockMillis: () -> Long = System::currentTimeMillis,
+    val messageLog: MessageLog = MessageLog(),
     restore: Boolean = true,
 ) : AutoCloseable {
     private val lock = Any()
@@ -169,6 +170,7 @@ class SessionManager(
         readDispatcher = readDispatcher,
         writeDispatcher = writeDispatcher,
         clockMillis = clockMillis,
+        messageLog = messageLog,
         onTabChanged = ::onSessionTabChanged,
     )
 

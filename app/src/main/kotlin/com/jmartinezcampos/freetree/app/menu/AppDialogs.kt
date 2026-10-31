@@ -2,7 +2,6 @@ package com.jmartinezcampos.freetree.app.menu
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,12 +24,16 @@ import com.jmartinezcampos.freetree.app.APP_BUILD_VERSION
 import com.jmartinezcampos.freetree.app.APP_COPYRIGHT
 import com.jmartinezcampos.freetree.app.APP_NAME
 import com.jmartinezcampos.freetree.app.APP_VERSION
+import com.jmartinezcampos.freetree.app.ui.AppTheme
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
+import com.jmartinezcampos.freetree.app.ui.LocalGraphColors
+import com.jmartinezcampos.freetree.app.ui.ThemeMode
 
 @Composable
-internal fun AboutDialog(onDismiss: () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val colors = GraphStyle.colors(dark)
+internal fun AboutDialog(
+    themeMode: ThemeMode,
+    onDismiss: () -> Unit,
+) {
     val icon = remember {
         object {}.javaClass.getResourceAsStream("/FreeTreeIcon.png")?.use(::loadImageBitmap)
     }
@@ -43,10 +46,8 @@ internal fun AboutDialog(onDismiss: () -> Unit) {
         ),
         resizable = false,
     ) {
-        MaterialTheme(
-            colorScheme = GraphStyle.materialColors(colors, dark),
-            typography = GraphStyle.typography,
-        ) {
+        AppTheme(themeMode) {
+            val colors = LocalGraphColors.current
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -104,12 +105,11 @@ internal fun AboutDialog(onDismiss: () -> Unit) {
 
 @Composable
 internal fun DiscardUnstagedDialog(
+    themeMode: ThemeMode,
     fileCount: Int,
     onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val dark = isSystemInDarkTheme()
-    val colors = GraphStyle.colors(dark)
     DialogWindow(
         onCloseRequest = onDismiss,
         title = "Discard unstaged changes",
@@ -119,10 +119,8 @@ internal fun DiscardUnstagedDialog(
         ),
         resizable = false,
     ) {
-        MaterialTheme(
-            colorScheme = GraphStyle.materialColors(colors, dark),
-            typography = GraphStyle.typography,
-        ) {
+        AppTheme(themeMode) {
+            val colors = LocalGraphColors.current
             Column(
                 modifier = Modifier
                     .fillMaxSize()

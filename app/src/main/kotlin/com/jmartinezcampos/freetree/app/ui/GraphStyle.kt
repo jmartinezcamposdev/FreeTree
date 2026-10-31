@@ -87,6 +87,18 @@ object GraphStyle {
     val ABOUT_TITLE_LINE_HEIGHT = 24.sp
     val CONFIRM_DIALOG_WIDTH: Dp = 460.dp
     val CONFIRM_DIALOG_HEIGHT: Dp = 240.dp
+    val MESSAGES_WINDOW_WIDTH: Dp = 980.dp
+    val MESSAGES_WINDOW_HEIGHT: Dp = 560.dp
+    val PREFERENCES_WINDOW_WIDTH: Dp = 460.dp
+    val PREFERENCES_WINDOW_HEIGHT: Dp = 230.dp
+    val LOG_TIMESTAMP_WIDTH: Dp = 64.dp
+    val LOG_LEVEL_WIDTH: Dp = 44.dp
+    val LOG_REPO_WIDTH: Dp = 150.dp
+    val LOG_CORNER_RADIUS: Dp = 6.dp
+    val LOG_ACTION_SIZE: Dp = 20.dp
+    val LOG_ICON_SIZE: Dp = 11.dp
+    val LOG_ICON_STROKE: Dp = 1.2.dp
+    val THEME_OPTION_CORNER_RADIUS: Dp = 6.dp
 
     val SPACE_XXS: Dp = 2.dp
     val SPACE_XS: Dp = 4.dp

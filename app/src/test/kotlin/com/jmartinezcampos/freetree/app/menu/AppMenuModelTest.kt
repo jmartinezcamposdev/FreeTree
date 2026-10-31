@@ -142,12 +142,17 @@ class AppMenuModelTest {
     }
 
     @Test
-    fun aboutIsOnlyInHelpOutsideMacOs() {
+    fun helpContainsMessagesLogEverywhereAndPreferencesOnlyOutsideMacOs() {
         val macHelp = buildAppMenu(MenuPlatform.MACOS, state, home).menu("Help")
         val linuxHelp = buildAppMenu(MenuPlatform.LINUX, state, home).menu("Help")
 
-        assertTrue(macHelp.children.isEmpty())
+        assertEquals("Messages Log", macHelp.item("Messages Log").label)
+        assertTrue(macHelp.children.filterIsInstance<MenuNode.Item>().none { it.model.label == "About FreeTree" })
+        assertTrue(macHelp.children.filterIsInstance<MenuNode.Item>().none { it.model.label == "Preferences" })
+
         assertEquals("About FreeTree", linuxHelp.item("About FreeTree").label)
+        assertEquals("Messages Log", linuxHelp.item("Messages Log").label)
+        assertEquals("Preferences", linuxHelp.item("Preferences").label)
     }
 
     @Test

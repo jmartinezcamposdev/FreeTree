@@ -18,6 +18,11 @@ import com.jmartinezcampos.freetree.app.menu.RecentRepositories
 import com.jmartinezcampos.freetree.app.menu.stagedPaths
 import com.jmartinezcampos.freetree.app.menu.unstagedPaths
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
+import com.jmartinezcampos.freetree.app.ui.MessagesWindow
+import com.jmartinezcampos.freetree.app.ui.PreferencesThemePreferences
+import com.jmartinezcampos.freetree.app.ui.PreferencesWindow
+import com.jmartinezcampos.freetree.app.ui.ThemeMode
+import com.jmartinezcampos.freetree.core.session.MessageLog
 import com.jmartinezcampos.freetree.core.session.RepoSession
 import com.jmartinezcampos.freetree.core.session.SessionManager
 import java.awt.Desktop
@@ -32,14 +37,20 @@ fun main(args: Array<String>) {
     System.setProperty("com.apple.mrj.application.apple.menu.about.name", "FreeTree")
     val aboutRequests = MutableStateFlow(false)
     installMacAboutHandler { aboutRequests.value = true }
+    val preferencesRequests = MutableStateFlow(false)
+    installMacPreferencesHandler { preferencesRequests.value = true }
     application {
         val startupRepository = startupRepository(args)
+        val messageLog = remember { MessageLog() }
+        val themePreferences = remember { PreferencesThemePreferences() }
+        var themeMode by remember { mutableStateOf(themePreferences.load()) }
         val manager = remember {
-            SessionManager(restore = startupRepository == null)
+            SessionManager(messageLog = messageLog, restore = startupRepository == null)
         }
         val recentRepositories = remember { RecentRepositories() }
         val activeSession by manager.activeSession.collectAsState()
         val aboutRequested by aboutRequests.collectAsState()
+        val preferencesRequested by preferencesRequests.collectAsState()
         val home = remember { Path.of(System.getProperty("user.home")) }
         val openRepository: (Path) -> Unit = remember(manager, recentRepositories) {
             { path ->
@@ -48,12 +59,21 @@ fun main(args: Array<String>) {
             }
         }
         var showAbout by remember { mutableStateOf(false) }
+        var showMessages by remember { mutableStateOf(false) }
+        var showPreferences by remember { mutableStateOf(false) }
         var discardRequest by remember { mutableStateOf<DiscardRequest?>(null) }
 
         LaunchedEffect(aboutRequested) {
             if (aboutRequested) {
                 showAbout = true
                 aboutRequests.value = false
+            }
+        }
+
+        LaunchedEffect(preferencesRequested) {
+            if (preferencesRequested) {
+                showPreferences = true
+                preferencesRequests.value = false
             }
         }
 
@@ -111,6 +131,8 @@ fun main(args: Array<String>) {
                     AppCommand.Minimize -> window.extendedState =
                         window.extendedState or Frame.ICONIFIED
                     AppCommand.About -> showAbout = true
+                    AppCommand.MessagesLog -> showMessages = true
+                    AppCommand.Preferences -> showPreferences = true
                 }
             }
 
@@ -122,12 +144,17 @@ fun main(args: Array<String>) {
             App(
                 sessionManager = manager,
                 onOpenRepository = { chooseRepository(openRepository) },
+                themeMode = themeMode,
             )
             if (showAbout) {
-                AboutDialog(onDismiss = { showAbout = false })
+                AboutDialog(
+                    themeMode = themeMode,
+                    onDismiss = { showAbout = false },
+                )
             }
             discardRequest?.let { request ->
                 DiscardUnstagedDialog(
+                    themeMode = themeMode,
                     fileCount = request.paths.size,
                     onConfirm = {
                         request.session.discardUnstaged(request.paths)
@@ -136,6 +163,23 @@ fun main(args: Array<String>) {
                     onDismiss = { discardRequest = null },
                 )
             }
+        }
+        if (showMessages) {
+            MessagesWindow(
+                messageLog = messageLog,
+                themeMode = themeMode,
+                onDismiss = { showMessages = false },
+            )
+        }
+        if (showPreferences) {
+            PreferencesWindow(
+                themeMode = themeMode,
+                onThemeModeChange = { mode ->
+                    themeMode = mode
+                    themePreferences.save(mode)
+                },
+                onDismiss = { showPreferences = false },
+            )
         }
     }
 }
@@ -156,6 +200,20 @@ private fun installMacAboutHandler(onAbout: () -> Unit) {
         }
     } catch (e: Exception) {
         System.err.println("FreeTree: cannot install the macOS About handler: ${e.message}")
+    }
+}
+
+private fun installMacPreferencesHandler(onPreferences: () -> Unit) {
+    if (!System.getProperty("os.name").startsWith("Mac", ignoreCase = true)) return
+    try {
+        if (Desktop.isDesktopSupported()) {
+            val desktop = Desktop.getDesktop()
+            if (desktop.isSupported(Desktop.Action.APP_PREFERENCES)) {
+                desktop.setPreferencesHandler { onPreferences() }
+            }
+        }
+    } catch (e: Exception) {
+        System.err.println("FreeTree: cannot install the macOS Preferences handler: ${e.message}")
     }
 }
 

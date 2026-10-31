@@ -2,7 +2,6 @@ package com.jmartinezcampos.freetree.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,7 +20,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -42,6 +40,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import com.jmartinezcampos.freetree.app.ui.AppTheme
 import com.jmartinezcampos.freetree.app.ui.ChangesPanel
 import com.jmartinezcampos.freetree.app.ui.CommitPanel
 import com.jmartinezcampos.freetree.app.ui.FilterBar
@@ -51,6 +50,7 @@ import com.jmartinezcampos.freetree.app.ui.LocalGraphColors
 import com.jmartinezcampos.freetree.app.ui.PreferencesSplitPreferences
 import com.jmartinezcampos.freetree.app.ui.SplitPreferences
 import com.jmartinezcampos.freetree.app.ui.TabBar
+import com.jmartinezcampos.freetree.app.ui.ThemeMode
 import com.jmartinezcampos.freetree.app.ui.Toolbar
 import com.jmartinezcampos.freetree.app.ui.UiTestTags
 import com.jmartinezcampos.freetree.app.ui.VerticalSplitter
@@ -71,23 +71,17 @@ internal fun App(
         session.openDiff(target, unlimited = true)
     },
     splitPreferences: SplitPreferences? = null,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
 ) {
-    val dark = isSystemInDarkTheme()
-    val colors = GraphStyle.colors(dark)
     val resolvedSplitPreferences = splitPreferences ?: remember { PreferencesSplitPreferences() }
-    CompositionLocalProvider(LocalGraphColors provides colors) {
-        MaterialTheme(
-            colorScheme = GraphStyle.materialColors(colors, dark),
-            typography = GraphStyle.typography,
-        ) {
-            Surface(modifier = Modifier.fillMaxSize()) {
-                AppContent(
-                    sessionManager = sessionManager,
-                    onOpenRepository = onOpenRepository,
-                    loadFullDiff = loadFullDiff,
-                    splitPreferences = resolvedSplitPreferences,
-                )
-            }
+    AppTheme(themeMode) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            AppContent(
+                sessionManager = sessionManager,
+                onOpenRepository = onOpenRepository,
+                loadFullDiff = loadFullDiff,
+                splitPreferences = resolvedSplitPreferences,
+            )
         }
     }
 }
@@ -216,7 +210,7 @@ private fun AppContent(
             }
         }
 
-        val message = state.message
+        val message = state.message as? UserMessage.Error
         if (message != null) {
             Divider()
             MessageBar(message = message, onDismiss = { session?.clearMessage() })

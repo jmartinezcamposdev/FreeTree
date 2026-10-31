@@ -56,6 +56,7 @@ class RepoSession(
     private val readDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val writeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val clockMillis: () -> Long = System::currentTimeMillis,
+    val messageLog: MessageLog = MessageLog(),
     private val onTabChanged: (TabState) -> Unit = {},
 ) : AutoCloseable {
     val path: Path = path.toAbsolutePath().normalize()
@@ -362,6 +363,23 @@ class RepoSession(
 
     fun clearMessage() {
         _state.update { it.copy(message = null) }
+    }
+
+    private fun publishMessage(message: UserMessage) {
+        messageLog.record(clockMillis(), path, message)
+        _state.update {
+            it.copy(message = message as? UserMessage.Error)
+        }
+    }
+
+    private fun publishReadMessage(activation: Int, message: UserMessage) {
+        synchronized(lock) {
+            if (!isCurrentLocked(activation)) return
+            messageLog.record(clockMillis(), path, message)
+            _state.update {
+                it.copy(message = message as? UserMessage.Error)
+            }
+        }
     }
 
     internal fun beginClose(): List<Job> = synchronized(lock) {
@@ -686,14 +704,13 @@ class RepoSession(
     }
 
     private fun reportWatcherFailure(activation: Int, error: Throwable) {
-        publishRead(activation) {
-            it.copy(
-                message = UserMessage.Error(
-                    "Repository watcher unavailable; polling every 3 s. ${describe(error)}",
-                    stderr(error),
-                ),
-            )
-        }
+        publishReadMessage(
+            activation,
+            UserMessage.Error(
+                "Repository watcher unavailable; polling every 3 s. ${describe(error)}",
+                stderr(error),
+            ),
+        )
     }
 
     private fun stopWatcher() {
@@ -906,10 +923,15 @@ class RepoSession(
     private fun publishLoadError(activation: Int, sequence: Long, error: Throwable) {
         synchronized(lock) {
             if (!isCurrentLoadLocked(activation, sequence)) return
+            val message = UserMessage.Error(
+                "Could not load the graph. ${describe(error)}",
+                stderr(error),
+            )
+            messageLog.record(clockMillis(), path, message)
             _state.update {
                 it.copy(
                     load = LoadState.Error(describe(error)),
-                    message = UserMessage.Error("Could not load the graph. ${describe(error)}", stderr(error)),
+                    message = message,
                 )
             }
         }
@@ -966,20 +988,20 @@ class RepoSession(
                 try {
                     val backend = git()
                     val result = action(backend)
-                    _state.update { it.copy(message = writeMessage(op, result)) }
+                    publishMessage(writeMessage(op, result))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    _state.update { it.copy(message = UserMessage.Error(describe(e), stderr(e))) }
+                    publishMessage(UserMessage.Error(describe(e), stderr(e)))
                 }
                 try {
                     refreshAfterWrite()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    _state.update {
-                        it.copy(message = UserMessage.Error("Could not refresh after the write. ${describe(e)}", stderr(e)))
-                    }
+                    publishMessage(
+                        UserMessage.Error("Could not refresh after the write. ${describe(e)}", stderr(e)),
+                    )
                 }
             } finally {
                 _state.update { it.copy(busy = null) }
@@ -996,7 +1018,7 @@ class RepoSession(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            _state.update { it.copy(message = UserMessage.Error("Could not refresh status. ${describe(e)}", stderr(e))) }
+            publishMessage(UserMessage.Error("Could not refresh status. ${describe(e)}", stderr(e)))
         }
 
         val refs = try {
@@ -1004,7 +1026,7 @@ class RepoSession(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            _state.update { it.copy(message = UserMessage.Error("Could not refresh refs. ${describe(e)}", stderr(e))) }
+            publishMessage(UserMessage.Error("Could not refresh refs. ${describe(e)}", stderr(e)))
             null
         }
         val head = try {
@@ -1012,7 +1034,7 @@ class RepoSession(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            _state.update { it.copy(message = UserMessage.Error("Could not refresh HEAD. ${describe(e)}", stderr(e))) }
+            publishMessage(UserMessage.Error("Could not refresh HEAD. ${describe(e)}", stderr(e)))
             null
         }
 
@@ -1033,9 +1055,7 @@ class RepoSession(
             val operation = try {
                 detectOperationInProgress(repositoryDirs)
             } catch (e: Exception) {
-                _state.update {
-                    it.copy(message = UserMessage.Error("Could not detect the repository operation. ${describe(e)}"))
-                }
+                publishMessage(UserMessage.Error("Could not detect the repository operation. ${describe(e)}"))
                 null
             }
             _state.update { it.copy(operationInProgress = operation) }
@@ -1073,7 +1093,7 @@ class RepoSession(
     }
 
     private fun rejected(text: String): Job {
-        _state.update { it.copy(message = UserMessage.Error(text)) }
+        publishMessage(UserMessage.Error(text))
         return Job().apply { complete() }
     }
 
@@ -1105,10 +1125,10 @@ class RepoSession(
     private fun reportReadError(activation: Int?, label: String, error: Throwable) {
         val message = UserMessage.Error("$label failed. ${describe(error)}", stderr(error))
         if (activation == null) {
-            _state.update { it.copy(message = message) }
+            publishMessage(message)
             return
         }
-        publishRead(activation) { it.copy(message = message) }
+        publishReadMessage(activation, message)
     }
 
     private fun reportDiffError(activation: Int, sequence: Long, error: Throwable) {

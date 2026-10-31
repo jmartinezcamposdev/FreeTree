@@ -216,13 +216,33 @@ internal fun buildAppMenu(
             label = "Help",
             enabled = true,
             children = if (platform == MenuPlatform.MACOS) {
-                emptyList()
+                listOf(
+                    MenuNode.Item(
+                        MenuItemModel(
+                            command = AppCommand.MessagesLog,
+                            label = "Messages Log",
+                        ),
+                    ),
+                )
             } else {
                 listOf(
                     MenuNode.Item(
                         MenuItemModel(
                             command = AppCommand.About,
                             label = "About FreeTree",
+                        ),
+                    ),
+                    MenuNode.Item(
+                        MenuItemModel(
+                            command = AppCommand.MessagesLog,
+                            label = "Messages Log",
+                        ),
+                    ),
+                    MenuNode.Separator,
+                    MenuNode.Item(
+                        MenuItemModel(
+                            command = AppCommand.Preferences,
+                            label = "Preferences",
                         ),
                     ),
                 )

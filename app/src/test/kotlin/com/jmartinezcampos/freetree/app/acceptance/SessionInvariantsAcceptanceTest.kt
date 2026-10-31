@@ -5,7 +5,6 @@ import com.jmartinezcampos.freetree.core.session.BusyOp
 import com.jmartinezcampos.freetree.core.session.LoadState
 import com.jmartinezcampos.freetree.core.session.Selection
 import com.jmartinezcampos.freetree.core.session.SessionPhase
-import com.jmartinezcampos.freetree.core.session.UserMessage
 import com.jmartinezcampos.freetree.core.testing.FakeMethod
 import com.jmartinezcampos.freetree.core.testing.FakeRepoScenarios
 import com.jmartinezcampos.freetree.core.watch.WatchEvent
@@ -242,7 +241,8 @@ class SessionInvariantsAcceptanceTest {
             assertTrue(write.isCompleted)
             assertNull(alphaSession.state.value.busy)
             assertEquals(SessionPhase.INACTIVE, alphaSession.phase.value)
-            assertTrue(alphaSession.state.value.message is UserMessage.Info)
+            assertNull(alphaSession.state.value.message)
+            assertTrue(harness.manager.messageLog.entries.value.any { it.text == "Index updated." })
             val readme = alphaSession.state.value.status!!.entries.single { it.path == "README.md" }
             assertEquals('M', readme.index)
             assertEquals(' ', readme.worktree)
