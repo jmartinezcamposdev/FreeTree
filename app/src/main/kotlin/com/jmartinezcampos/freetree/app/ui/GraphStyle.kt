@@ -55,6 +55,7 @@ data class GraphColors(
 
 object GraphStyle {
     val ROW_HEIGHT: Dp = 28.dp
+    val COMFORTABLE_ROW_HEIGHT: Dp = 48.dp
     val LANE_WIDTH: Dp = 16.dp
     val NODE_RADIUS: Dp = 4.dp
     val STROKE_WIDTH: Dp = 1.5.dp
@@ -90,7 +91,7 @@ object GraphStyle {
     val MESSAGES_WINDOW_WIDTH: Dp = 980.dp
     val MESSAGES_WINDOW_HEIGHT: Dp = 560.dp
     val PREFERENCES_WINDOW_WIDTH: Dp = 460.dp
-    val PREFERENCES_WINDOW_HEIGHT: Dp = 230.dp
+    val PREFERENCES_WINDOW_HEIGHT: Dp = 390.dp
     val LOG_TIMESTAMP_WIDTH: Dp = 64.dp
     val LOG_LEVEL_WIDTH: Dp = 44.dp
     val LOG_REPO_WIDTH: Dp = 150.dp

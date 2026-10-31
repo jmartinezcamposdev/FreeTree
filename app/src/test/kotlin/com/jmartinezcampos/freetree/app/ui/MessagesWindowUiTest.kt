@@ -1,5 +1,8 @@
 package com.jmartinezcampos.freetree.app.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHasNoClickAction
@@ -14,6 +17,7 @@ import com.jmartinezcampos.freetree.core.session.UserMessage
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 @OptIn(ExperimentalTestApi::class)
 class MessagesWindowUiTest {
@@ -71,7 +75,7 @@ class MessagesWindowUiTest {
 
     @Test
     fun themeOptionsInvokeTheSelectedMode() =
-        runDesktopComposeUiTest(width = 500, height = 300) {
+        runDesktopComposeUiTest(width = 500, height = 500) {
             var selected: ThemeMode? = null
             setContent {
                 AppTheme(ThemeMode.SYSTEM) {
@@ -92,5 +96,37 @@ class MessagesWindowUiTest {
 
             assertEquals(ThemeMode.DARK, selected)
             saveScreenshot("10-preferences.png")
+        }
+
+    @Test
+    fun historyOptionsInvokeCallbacks() =
+        runDesktopComposeUiTest(width = 500, height = 500) {
+            var historyMode by mutableStateOf(HistoryViewMode.COMPACT)
+            var showDate by mutableStateOf(true)
+            setContent {
+                AppTheme(ThemeMode.SYSTEM) {
+                    PreferencesContent(
+                        themeMode = ThemeMode.SYSTEM,
+                        onThemeModeChange = {},
+                        historyViewMode = historyMode,
+                        onHistoryViewModeChange = { historyMode = it },
+                        showHistoryDate = showDate,
+                        onShowHistoryDateChange = { showDate = it },
+                    )
+                }
+            }
+
+            onNodeWithTag(UiTestTags.HISTORY_COMPACT).assertExists()
+            onNodeWithTag(UiTestTags.HISTORY_SHOW_DATE).assertExists()
+
+            onNodeWithTag(UiTestTags.HISTORY_COMFORTABLE).performClick()
+            waitForIdle()
+            assertEquals(HistoryViewMode.COMFORTABLE, historyMode)
+
+            onNodeWithTag(UiTestTags.HISTORY_SHOW_DATE).performClick()
+            waitForIdle()
+            assertFalse(showDate)
+
+            saveScreenshot("17-preferences-history.png")
         }
 }

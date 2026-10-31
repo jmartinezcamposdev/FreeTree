@@ -18,7 +18,9 @@ import com.jmartinezcampos.freetree.app.menu.RecentRepositories
 import com.jmartinezcampos.freetree.app.menu.stagedPaths
 import com.jmartinezcampos.freetree.app.menu.unstagedPaths
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
+import com.jmartinezcampos.freetree.app.ui.HistoryViewMode
 import com.jmartinezcampos.freetree.app.ui.MessagesWindow
+import com.jmartinezcampos.freetree.app.ui.PreferencesHistoryPreferences
 import com.jmartinezcampos.freetree.app.ui.PreferencesThemePreferences
 import com.jmartinezcampos.freetree.app.ui.PreferencesWindow
 import com.jmartinezcampos.freetree.app.ui.ThemeMode
@@ -44,6 +46,9 @@ fun main(args: Array<String>) {
         val messageLog = remember { MessageLog() }
         val themePreferences = remember { PreferencesThemePreferences() }
         var themeMode by remember { mutableStateOf(themePreferences.load()) }
+        val historyPreferences = remember { PreferencesHistoryPreferences() }
+        var historyViewMode by remember { mutableStateOf(historyPreferences.loadViewMode()) }
+        var showHistoryDate by remember { mutableStateOf(historyPreferences.loadShowDate()) }
         val manager = remember {
             SessionManager(messageLog = messageLog, restore = startupRepository == null)
         }
@@ -145,6 +150,8 @@ fun main(args: Array<String>) {
                 sessionManager = manager,
                 onOpenRepository = { chooseRepository(openRepository) },
                 themeMode = themeMode,
+                historyViewMode = historyViewMode,
+                showHistoryDate = showHistoryDate,
             )
             if (showAbout) {
                 AboutDialog(
@@ -177,6 +184,16 @@ fun main(args: Array<String>) {
                 onThemeModeChange = { mode ->
                     themeMode = mode
                     themePreferences.save(mode)
+                },
+                historyViewMode = historyViewMode,
+                onHistoryViewModeChange = { mode ->
+                    historyViewMode = mode
+                    historyPreferences.saveViewMode(mode)
+                },
+                showHistoryDate = showHistoryDate,
+                onShowHistoryDateChange = { show ->
+                    showHistoryDate = show
+                    historyPreferences.saveShowDate(show)
                 },
                 onDismiss = { showPreferences = false },
             )

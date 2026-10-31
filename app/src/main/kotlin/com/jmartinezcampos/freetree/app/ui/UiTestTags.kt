@@ -72,10 +72,16 @@ object UiTestTags {
     const val THEME_SYSTEM = "theme-system"
     const val THEME_LIGHT = "theme-light"
     const val THEME_DARK = "theme-dark"
+    const val HISTORY_COMPACT = "history-compact"
+    const val HISTORY_COMFORTABLE = "history-comfortable"
+    const val HISTORY_SHOW_DATE = "history-show-date"
 
     fun messageLogRow(id: Long) = "message-log-row-$id"
     fun messageLogCopy(id: Long) = "message-log-copy-$id"
     fun messageLogToggle(id: Long) = "message-log-toggle-$id"
+    fun historyDate(hash: String) = "history-date-$hash"
+    fun historyAuthor(hash: String) = "history-author-$hash"
+    fun historySubject(hash: String) = "history-subject-$hash"
 
     fun tab(index: Int) = "tab-$index"
     fun tabClose(index: Int) = "tab-close-$index"

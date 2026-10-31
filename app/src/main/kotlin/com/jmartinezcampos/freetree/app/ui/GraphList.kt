@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -47,6 +48,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.Canvas
@@ -65,6 +67,8 @@ import kotlinx.coroutines.launch
 internal fun GraphList(
     state: RepoUiState,
     session: RepoSession?,
+    viewMode: HistoryViewMode = HistoryViewMode.COMPACT,
+    showDate: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
@@ -263,6 +267,8 @@ internal fun GraphList(
                         connectToWorkingTree = row == 0,
                         visibleLanes = visibleLanes,
                         laneOffset = laneOffset,
+                        viewMode = viewMode,
+                        showDate = showDate,
                         onClick = { session?.selectCommit(hash) },
                     )
                 }
@@ -364,16 +370,23 @@ private fun CommitGraphRow(
     connectToWorkingTree: Boolean,
     visibleLanes: Int,
     laneOffset: Int,
+    viewMode: HistoryViewMode,
+    showDate: Boolean,
     onClick: () -> Unit,
 ) {
     val colors = LocalGraphColors.current
     val hash = graph.hash(row)
     val laneWidth = GraphStyle.LANE_WIDTH * visibleLanes.toFloat()
+    val rowHeight = if (viewMode == HistoryViewMode.COMFORTABLE) {
+        GraphStyle.COMFORTABLE_ROW_HEIGHT
+    } else {
+        GraphStyle.ROW_HEIGHT
+    }
     Box(Modifier.testTag(UiTestTags.commitRow(row)).clickable(onClick = onClick)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(GraphStyle.ROW_HEIGHT)
+                .height(rowHeight)
                 .background(if (isSelected) colors.selectedRow else colors.background)
                 .semantics { selected = isSelected }
                 .testTag(UiTestTags.commitRowForHash(hash))
@@ -389,36 +402,120 @@ private fun CommitGraphRow(
                 isHead = isHead,
                 connectToWorkingTree = connectToWorkingTree,
             )
+            when (viewMode) {
+                HistoryViewMode.COMPACT -> CompactCommitDetails(
+                    subject = graph.subject(row),
+                    author = graph.author(row),
+                    refs = refs,
+                    isHead = isHead,
+                    hash = hash,
+                )
+                HistoryViewMode.COMFORTABLE -> ComfortableCommitDetails(
+                    subject = graph.subject(row),
+                    author = graph.author(row),
+                    refs = refs,
+                    isHead = isHead,
+                    hash = hash,
+                )
+            }
+            if (showDate) {
+                HistoryDate(hash = hash, timeSec = graph.timeSec(row))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.CompactCommitDetails(
+    subject: String,
+    author: String,
+    refs: List<GitRef>,
+    isHead: Boolean,
+    hash: String,
+) {
+    val colors = LocalGraphColors.current
+    Text(
+        text = subject,
+        style = MaterialTheme.typography.bodyMedium,
+        color = colors.onSurface,
+        maxLines = GraphStyle.MAX_TEXT_LINES,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .weight(GraphStyle.FILL_WEIGHT)
+            .padding(horizontal = GraphStyle.SPACE_SM)
+            .testTag(UiTestTags.historySubject(hash)),
+    )
+    RefChips(refs = refs, isHead = isHead)
+    Text(
+        text = author,
+        style = MaterialTheme.typography.bodySmall,
+        color = colors.onSurfaceMuted,
+        maxLines = GraphStyle.MAX_TEXT_LINES,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .width(GraphStyle.AUTHOR_COLUMN_WIDTH)
+            .padding(start = GraphStyle.SPACE_MD)
+            .testTag(UiTestTags.historyAuthor(hash)),
+    )
+}
+
+@Composable
+private fun RowScope.ComfortableCommitDetails(
+    subject: String,
+    author: String,
+    refs: List<GitRef>,
+    isHead: Boolean,
+    hash: String,
+) {
+    val colors = LocalGraphColors.current
+    Column(
+        modifier = Modifier
+            .weight(GraphStyle.FILL_WEIGHT)
+            .padding(horizontal = GraphStyle.SPACE_SM),
+        verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XXS),
+    ) {
+        Text(
+            text = subject,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurface,
+            maxLines = GraphStyle.MAX_TEXT_LINES,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(UiTestTags.historySubject(hash)),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = graph.subject(row),
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurface,
+                text = author,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceMuted,
                 maxLines = GraphStyle.MAX_TEXT_LINES,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(GraphStyle.FILL_WEIGHT)
-                    .padding(horizontal = GraphStyle.SPACE_SM),
+                    .testTag(UiTestTags.historyAuthor(hash)),
             )
             RefChips(refs = refs, isHead = isHead)
-            Text(
-                text = graph.author(row),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceMuted,
-                maxLines = GraphStyle.MAX_TEXT_LINES,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .width(GraphStyle.AUTHOR_COLUMN_WIDTH)
-                    .padding(start = GraphStyle.SPACE_MD),
-            )
-            Text(
-                text = formatDate(graph.timeSec(row)),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceMuted,
-                maxLines = GraphStyle.MAX_TEXT_LINES,
-                modifier = Modifier.width(GraphStyle.DATE_COLUMN_WIDTH),
-            )
         }
     }
+}
+
+@Composable
+private fun HistoryDate(hash: String, timeSec: Long) {
+    val colors = LocalGraphColors.current
+    Text(
+        text = formatDate(timeSec),
+        style = MaterialTheme.typography.bodySmall,
+        color = colors.onSurfaceMuted,
+        maxLines = GraphStyle.MAX_TEXT_LINES,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .width(GraphStyle.DATE_COLUMN_WIDTH)
+            .testTag(UiTestTags.historyDate(hash)),
+    )
 }
 
 @Composable

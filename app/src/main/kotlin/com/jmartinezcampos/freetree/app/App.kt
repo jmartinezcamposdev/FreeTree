@@ -46,6 +46,7 @@ import com.jmartinezcampos.freetree.app.ui.CommitPanel
 import com.jmartinezcampos.freetree.app.ui.FilterBar
 import com.jmartinezcampos.freetree.app.ui.GraphList
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
+import com.jmartinezcampos.freetree.app.ui.HistoryViewMode
 import com.jmartinezcampos.freetree.app.ui.LocalGraphColors
 import com.jmartinezcampos.freetree.app.ui.PreferencesSplitPreferences
 import com.jmartinezcampos.freetree.app.ui.SplitPreferences
@@ -72,6 +73,8 @@ internal fun App(
     },
     splitPreferences: SplitPreferences? = null,
     themeMode: ThemeMode = ThemeMode.SYSTEM,
+    historyViewMode: HistoryViewMode = HistoryViewMode.COMPACT,
+    showHistoryDate: Boolean = true,
 ) {
     val resolvedSplitPreferences = splitPreferences ?: remember { PreferencesSplitPreferences() }
     AppTheme(themeMode) {
@@ -81,6 +84,8 @@ internal fun App(
                 onOpenRepository = onOpenRepository,
                 loadFullDiff = loadFullDiff,
                 splitPreferences = resolvedSplitPreferences,
+                historyViewMode = historyViewMode,
+                showHistoryDate = showHistoryDate,
             )
         }
     }
@@ -92,6 +97,8 @@ private fun AppContent(
     onOpenRepository: (() -> Unit)?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
     splitPreferences: SplitPreferences,
+    historyViewMode: HistoryViewMode,
+    showHistoryDate: Boolean,
 ) {
     val colors = LocalGraphColors.current
     val tabs by sessionManager.tabs.collectAsState()
@@ -185,6 +192,8 @@ private fun AppContent(
                     GraphList(
                         state = state,
                         session = session,
+                        viewMode = historyViewMode,
+                        showDate = showHistoryDate,
                         modifier = Modifier.weight(graphFraction),
                     )
                     VerticalSplitter(
