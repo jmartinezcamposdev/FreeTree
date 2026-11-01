@@ -811,7 +811,11 @@ class RepoSession(
             }
         }
 
-        val engine = LaneLayoutEngine(flat = spec.flat)
+        val workingTreeHash = headAtStart?.commit?.takeIf { spec.includeHead }
+        val engine = LaneLayoutEngine(
+            flat = spec.flat,
+            workingTreeHash = workingTreeHash,
+        )
         if (spec.revs.isEmpty() && !spec.includeHead) {
             finishGraphLoad(
                 activation,

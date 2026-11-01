@@ -226,7 +226,13 @@ internal fun GraphList(
         }
         val headHash = state.head?.commit?.takeIf { state.showHead }
         val showHead = showHeadHighlight(state.head, state.labelsByCommit, state.showHead)
-        val workingLane = if (graph.rowCount > 0) graph.nodeLane(0) else 0
+        val workingTreeRow = state.head?.commit
+            ?.let(graph::indexOfHash)
+            ?.takeIf { it >= 0 }
+            ?: -1
+        val workingTreeLane = graph.workingTreeLane?.takeIf { workingTreeRow >= 0 }
+        val workingLane = workingTreeLane
+            ?: if (graph.rowCount > 0) graph.nodeLane(0) else 0
         val stagedCount = state.status.stagedPaths().size
         val unstagedCount = state.status.unstagedPaths().size
 
@@ -246,7 +252,7 @@ internal fun GraphList(
                         laneWidth = GraphStyle.LANE_WIDTH * visibleLanes.toFloat(),
                         workingLane = workingLane,
                         laneOffset = laneOffset,
-                        connectToCommit = graph.rowCount > 0,
+                        connectToCommit = workingTreeLane != null,
                         onClick = { session?.selectWorkingTree() },
                     )
                 }
@@ -280,7 +286,8 @@ internal fun GraphList(
                             isHead = hash == headHash && showHead,
                             isSelected = state.selection is Selection.Commit &&
                                 (state.selection as Selection.Commit).hash == hash,
-                            connectToWorkingTree = row == 0,
+                            workingTreeLane = workingTreeLane,
+                            workingTreeRow = workingTreeRow,
                             visibleLanes = visibleLanes,
                             laneOffset = laneOffset,
                             viewMode = viewMode,
@@ -402,7 +409,8 @@ private fun CommitGraphRow(
     refs: List<GitRef>,
     isHead: Boolean,
     isSelected: Boolean,
-    connectToWorkingTree: Boolean,
+    workingTreeLane: Int?,
+    workingTreeRow: Int,
     visibleLanes: Int,
     laneOffset: Int,
     viewMode: HistoryViewMode,
@@ -435,7 +443,8 @@ private fun CommitGraphRow(
                 laneWidth = laneWidth,
                 laneOffset = laneOffset,
                 isHead = isHead,
-                connectToWorkingTree = connectToWorkingTree,
+                workingTreeLane = workingTreeLane,
+                workingTreeRow = workingTreeRow,
             )
             when (viewMode) {
                 HistoryViewMode.COMPACT -> CompactCommitDetails(
@@ -560,7 +569,8 @@ private fun LaneCanvas(
     laneWidth: androidx.compose.ui.unit.Dp,
     laneOffset: Int,
     isHead: Boolean,
-    connectToWorkingTree: Boolean,
+    workingTreeLane: Int?,
+    workingTreeRow: Int,
 ) {
     val colors = LocalGraphColors.current
     val density = LocalDensity.current
@@ -591,6 +601,13 @@ private fun LaneCanvas(
 
         for (index in 0 until segments.size) {
             val segment = segments[index]
+            val workingTreeSegment = workingTreeLane != null &&
+                row <= workingTreeRow &&
+                segment.from == workingTreeLane &&
+                segment.to == workingTreeLane &&
+                (segment.kind == SegKind.PASS ||
+                    (row == workingTreeRow && segment.kind == SegKind.IN))
+            if (workingTreeSegment) continue
             val color = colors.lanePalette[Math.floorMod(segment.color, colors.lanePalette.size)]
             val fromX = x(segment.from)
             val toX = x(segment.to)
@@ -634,13 +651,14 @@ private fun LaneCanvas(
         val nodeX = x(nodeLane)
         val nodeY = halfHeight
         val radius = GraphStyle.NODE_RADIUS.toPx()
-        if (connectToWorkingTree) {
-            val endY = nodeY - radius - GraphStyle.WORKING_TREE_BALL_GAP.toPx()
+        if (workingTreeLane != null && row <= workingTreeRow) {
+            val linkX = x(workingTreeLane)
+            val endY = if (row == workingTreeRow) nodeY else size.height
             if (endY > 0f) {
                 drawLine(
                     color = colors.onSurfaceMuted,
-                    start = Offset(nodeX, 0f),
-                    end = Offset(nodeX, endY),
+                    start = Offset(linkX, 0f),
+                    end = Offset(linkX, endY),
                     strokeWidth = GraphStyle.STROKE_WIDTH.toPx(),
                     pathEffect = PathEffect.dashPathEffect(
                         floatArrayOf(

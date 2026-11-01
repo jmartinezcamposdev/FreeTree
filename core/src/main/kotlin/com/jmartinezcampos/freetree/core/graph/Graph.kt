@@ -2,19 +2,33 @@ package com.jmartinezcampos.freetree.core.graph
 
 import com.jmartinezcampos.freetree.core.model.RawCommit
 
-class LaneLayoutEngine(flat: Boolean = false, chunkSize: Int = 4096) {
+class LaneLayoutEngine(
+    flat: Boolean = false,
+    chunkSize: Int = 4096,
+    workingTreeHash: String? = null,
+) {
     init {
         require(chunkSize > 0) { "chunkSize must be positive: $chunkSize" }
     }
 
     private val flatMode = flat
     private val chunkSize = chunkSize
+    private val workingTreeHashValue = workingTreeHash.takeIf { !flatMode }
     private val chunks = ArrayList<RowChunk>()
     private var open = RowChunk(chunkSize)
     private var rowCount = 0
     private val lanes = ArrayList<Lane?>()
     private var colorCounter = 0
     private var maxLanes = 0
+    private var workingTreeLane: Int? = null
+    private var workingTreeMerged = false
+
+    init {
+        if (workingTreeHashValue != null) {
+            lanes += Lane(workingTreeHashValue, nextColor())
+            workingTreeLane = 0
+        }
+    }
 
     internal val flat: Boolean
         get() = flatMode
@@ -35,6 +49,7 @@ class LaneLayoutEngine(flat: Boolean = false, chunkSize: Int = 4096) {
             maxLanes = maxLanes,
             complete = complete,
             flat = flatMode,
+            workingTreeLane = workingTreeLane.takeIf { workingTreeMerged },
         )
     }
 
@@ -45,6 +60,9 @@ class LaneLayoutEngine(flat: Boolean = false, chunkSize: Int = 4096) {
 
     private fun addGraph(c: RawCommit) {
         val incoming = lanes.indices.filter { lanes[it]?.awaits == c.hash }
+        if (workingTreeLane != null && workingTreeLane in incoming) {
+            workingTreeMerged = true
+        }
         val node = if (incoming.isEmpty()) firstFreeSlot() else incoming.min()
         val color = if (incoming.isEmpty()) nextColor() else lanes[node]!!.color
         val segments = ArrayList<Seg>()
@@ -114,6 +132,7 @@ class GraphSnapshot internal constructor(
     val maxLanes: Int,
     val complete: Boolean,
     val flat: Boolean,
+    val workingTreeLane: Int?,
 ) {
     private val rowByHash: Map<String, Int> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
         val index = HashMap<String, Int>(rowCount)

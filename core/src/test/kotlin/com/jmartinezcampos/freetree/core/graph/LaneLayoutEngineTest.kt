@@ -244,6 +244,86 @@ class LaneLayoutEngineTest {
         assertFailsWith<IllegalArgumentException> { snapshot.hash(-1) }
     }
 
+    @Test
+    fun workingTreeLaneRunsFromTheTopToHeadWithoutDisturbingHeadAtRowZero() {
+        val commits = listOf(
+            commit("x", "a"),
+            commit("a", "head"),
+            commit("head", "root"),
+            commit("root"),
+        )
+        val engine = LaneLayoutEngine(workingTreeHash = "head")
+        commits.forEach(engine::add)
+        val snapshot = engine.snapshot(complete = true)
+
+        assertEquals(0, snapshot.workingTreeLane)
+        assertEquals(0, snapshot.nodeLane(2))
+        assertEquals(
+            listOf(
+                GraphSegment(0, 0, 0, SegKind.PASS, false),
+                GraphSegment(1, 1, 1, SegKind.OUT, false),
+            ),
+            snapshot.segments(0).toList(),
+        )
+        assertEquals(
+            listOf(
+                GraphSegment(0, 0, 0, SegKind.PASS, false),
+                GraphSegment(1, 1, 1, SegKind.IN, false),
+                GraphSegment(1, 1, 1, SegKind.OUT, false),
+            ),
+            snapshot.segments(1).toList(),
+        )
+        assertEquals(
+            listOf(
+                GraphSegment(0, 0, 0, SegKind.IN, false),
+                GraphSegment(1, 0, 1, SegKind.IN, false),
+                GraphSegment(0, 0, 0, SegKind.OUT, false),
+            ),
+            snapshot.segments(2).toList(),
+        )
+    }
+
+    @Test
+    fun workingTreeLaneIsOmittedWhenHeadNeverAppears() {
+        val engine = LaneLayoutEngine(workingTreeHash = "missing")
+        listOf(commit("a", "b"), commit("b")).forEach(engine::add)
+        val snapshot = engine.snapshot(complete = true)
+
+        assertEquals(null, snapshot.workingTreeLane)
+    }
+
+    @Test
+    fun workingTreeLaneKeepsTheOriginalLayoutWhenHeadIsFirst() {
+        val engine = LaneLayoutEngine(workingTreeHash = "a")
+        listOf(commit("a", "b"), commit("b")).forEach(engine::add)
+        val snapshot = engine.snapshot(complete = true)
+
+        assertEquals(0, snapshot.workingTreeLane)
+        assertEquals(0, snapshot.nodeLane(0))
+        assertEquals(1, snapshot.maxLanes)
+        assertEquals(
+            listOf(
+                GraphSegment(0, 0, 0, SegKind.IN, false),
+                GraphSegment(0, 0, 0, SegKind.OUT, false),
+            ),
+            snapshot.segments(0).toList(),
+        )
+        assertEquals(
+            listOf(GraphSegment(0, 0, 0, SegKind.IN, false)),
+            snapshot.segments(1).toList(),
+        )
+    }
+
+    @Test
+    fun workingTreeLaneIsDisabledInFlatMode() {
+        val engine = LaneLayoutEngine(flat = true, workingTreeHash = "a")
+        listOf(commit("a", "b"), commit("b")).forEach(engine::add)
+        val snapshot = engine.snapshot(complete = true)
+
+        assertEquals(null, snapshot.workingTreeLane)
+        assertEquals(1, snapshot.maxLanes)
+    }
+
     private fun commit(hash: String, vararg parents: String) = RawCommit(
         hash = hash,
         parents = parents.toList(),

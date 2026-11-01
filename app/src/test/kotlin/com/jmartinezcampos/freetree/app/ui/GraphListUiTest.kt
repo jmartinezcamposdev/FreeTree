@@ -20,6 +20,7 @@ import com.jmartinezcampos.freetree.core.session.Selection
 import com.jmartinezcampos.freetree.core.testing.RandomDag
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class GraphListUiTest {
@@ -101,6 +102,33 @@ class GraphListUiTest {
             fixture.close()
         }
     }
+
+    @Test
+    fun workingTreeLineConnectsToHeadWhenHeadIsNotTheNewestRow() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val commits = RandomDag.generate(seed = 24, commitCount = 12)
+            val head = commits[3].hash
+            val fixture = uiFixture(
+                commits = commits,
+                refs = listOf(
+                    GitRef("refs/heads/main", "main", RefKind.LOCAL_BRANCH, commits[0].hash, false, null),
+                    GitRef("refs/heads/topic", "topic", RefKind.LOCAL_BRANCH, head, true, null),
+                ),
+                head = HeadInfo(head, "topic"),
+            )
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.graph?.complete == true
+                }
+                val graph = fixture.manager.activeSession.value!!.state.value.graph!!
+                assertTrue(graph.indexOfHash(head) > 0)
+                assertEquals(0, graph.workingTreeLane)
+                saveScreenshot("24-working-tree-head-link.png")
+            } finally {
+                fixture.close()
+            }
+        }
 
     @Test
     fun changesRowShowsNoChangedFilesWhenClean() = runDesktopComposeUiTest(width = 1200, height = 800) {
