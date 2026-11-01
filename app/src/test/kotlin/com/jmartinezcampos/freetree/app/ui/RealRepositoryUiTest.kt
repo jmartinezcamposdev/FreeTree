@@ -60,7 +60,7 @@ class RealRepositoryUiTest {
                 onNodeWithTag(UiTestTags.changedFile("src/App.kt")).performClick()
                 waitUntil(timeoutMillis = 20_000) { state(manager).openDiff != null }
                 onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
-                onNodeWithText("+fun main() = Unit").assertExists()
+                onNodeWithText("fun main() = Unit").assertExists()
 
                 onNodeWithTag(UiTestTags.CHANGES_ROW).performClick()
                 waitUntil(timeoutMillis = 20_000) {

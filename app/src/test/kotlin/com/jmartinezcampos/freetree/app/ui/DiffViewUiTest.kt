@@ -1,6 +1,7 @@
 package com.jmartinezcampos.freetree.app.ui
 
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
@@ -62,7 +63,8 @@ class DiffViewUiTest {
         onNodeWithTag(UiTestTags.DIFF_LOAD_FULL).assertExists()
         onNodeWithTag(UiTestTags.DIFF_LOAD_FULL).performClick()
         assertEquals(1, loadFullCalls)
-        onNodeWithText("+new line").assertExists()
+        onNodeWithText("new line").assertExists()
+        onNodeWithText("+").assertExists()
     }
 
     @Test
@@ -97,7 +99,7 @@ class DiffViewUiTest {
         onNodeWithText("--- a/README.md").assertDoesNotExist()
         onNodeWithText("+++ b/README.md").assertDoesNotExist()
         onNodeWithText("@@ -1 +1 @@").assertExists()
-        onNodeWithText("+new line").assertExists()
+        onNodeWithText("new line").assertExists()
         saveScreenshot("13-diff-without-file-header.png")
     }
 
@@ -128,6 +130,49 @@ class DiffViewUiTest {
         onNodeWithTag(UiTestTags.DIFF_EMPTY).assertExists()
         onNodeWithText("No textual changes").assertExists()
     }
+
+    @Test
+    fun diffSelectionCopiesRawContentWithoutGutterOrMarkers() =
+        runDesktopComposeUiTest(width = 800, height = 600) {
+            val selectionState = SelectionState()
+            setContent {
+                CompositionLocalProvider(LocalGraphColors provides GraphStyle.dark) {
+                    MaterialTheme {
+                        DiffView(
+                            diff = DiffText(
+                                lines = listOf(
+                                    DiffLine(DiffLineKind.HUNK_HEADER, null, null, "@@ -1,2 +1,2 @@"),
+                                    DiffLine(DiffLineKind.DEL, 1, null, "old line"),
+                                    DiffLine(DiffLineKind.ADD, null, 1, "new line"),
+                                ),
+                                binary = false,
+                                truncated = false,
+                            ),
+                            loading = false,
+                            error = null,
+                            onLoadFull = {},
+                            selectionState = selectionState,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+            waitForIdle()
+            runOnIdle { selectionState.selectAll() }
+            waitForIdle()
+
+            runOnIdle {
+                assertEquals(
+                    listOf("@@ -1,2 +1,2 @@", "old line", "new line"),
+                    selectionState.getSelectableTexts().map { it.text },
+                )
+                assertEquals(
+                    "@@ -1,2 +1,2 @@\nold line\nnew line",
+                    selectionState.selectedTexts.joinToString("\n") { it.text },
+                )
+            }
+            saveScreenshot("32-diff-selection.png")
+        }
 
     @Test
     fun diffErrorKeepsGitStderrSelectable() = runDesktopComposeUiTest(width = 800, height = 600) {

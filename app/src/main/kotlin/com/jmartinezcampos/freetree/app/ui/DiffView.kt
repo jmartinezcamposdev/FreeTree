@@ -13,12 +13,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.SelectionState
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,10 +40,14 @@ internal fun DiffView(
     loading: Boolean,
     error: UserMessage.Error?,
     onLoadFull: () -> Unit,
+    selectionState: SelectionState = rememberSelectionState(),
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
     val listState = rememberLazyListState()
+    LaunchedEffect(diff) {
+        selectionState.clear()
+    }
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -136,14 +144,19 @@ internal fun DiffView(
                             )
                         }
                     } else {
-                        LazyColumn(
-                            state = listState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(end = GraphStyle.SCROLLBAR_GUTTER),
+                        SelectionContainer(
+                            state = selectionState,
+                            modifier = Modifier.fillMaxSize(),
                         ) {
-                            items(items = visibleLines) { line ->
-                                DiffLineRow(line)
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(end = GraphStyle.SCROLLBAR_GUTTER),
+                            ) {
+                                items(items = visibleLines) { line ->
+                                    DiffLineRow(line)
+                                }
                             }
                         }
                         ModernScrollbar(
@@ -184,33 +197,51 @@ private fun DiffLineRow(line: DiffLine) {
             .testTag(UiTestTags.diffLine(line.oldNo, line.newNo)),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        DisableSelection {
+            Text(
+                text = line.oldNo?.toString().orEmpty(),
+                style = GraphStyle.monoTextStyle,
+                color = colors.diffLineNumber,
+                textAlign = TextAlign.End,
+                maxLines = GraphStyle.MAX_TEXT_LINES,
+                modifier = Modifier
+                    .width(GraphStyle.DIFF_LINE_NUMBER_WIDTH)
+                    .padding(end = GraphStyle.SPACE_XS),
+            )
+            Text(
+                text = line.newNo?.toString().orEmpty(),
+                style = GraphStyle.monoTextStyle,
+                color = colors.diffLineNumber,
+                textAlign = TextAlign.End,
+                maxLines = GraphStyle.MAX_TEXT_LINES,
+                modifier = Modifier
+                    .width(GraphStyle.DIFF_LINE_NUMBER_WIDTH)
+                    .padding(end = GraphStyle.SPACE_XS),
+            )
+        }
+        if (prefix.isNotEmpty()) {
+            // The +/-/space marker stays visible but is excluded from copied text.
+            DisableSelection {
+                Text(
+                    text = prefix,
+                    style = GraphStyle.monoTextStyle,
+                    color = colors.onSurface,
+                    maxLines = GraphStyle.MAX_TEXT_LINES,
+                    modifier = Modifier.padding(start = GraphStyle.SPACE_XXS),
+                )
+            }
+        }
         Text(
-            text = line.oldNo?.toString().orEmpty(),
-            style = GraphStyle.monoTextStyle,
-            color = colors.diffLineNumber,
-            textAlign = TextAlign.End,
-            maxLines = GraphStyle.MAX_TEXT_LINES,
-            modifier = Modifier
-                .width(GraphStyle.DIFF_LINE_NUMBER_WIDTH)
-                .padding(end = GraphStyle.SPACE_XS),
-        )
-        Text(
-            text = line.newNo?.toString().orEmpty(),
-            style = GraphStyle.monoTextStyle,
-            color = colors.diffLineNumber,
-            textAlign = TextAlign.End,
-            maxLines = GraphStyle.MAX_TEXT_LINES,
-            modifier = Modifier
-                .width(GraphStyle.DIFF_LINE_NUMBER_WIDTH)
-                .padding(end = GraphStyle.SPACE_XS),
-        )
-        Text(
-            text = prefix + truncateDiffLine(line.text),
+            text = truncateDiffLine(line.text),
             style = GraphStyle.monoTextStyle,
             color = colors.onSurface,
             maxLines = GraphStyle.MAX_TEXT_LINES,
             overflow = TextOverflow.Clip,
-            modifier = Modifier.padding(start = GraphStyle.SPACE_XXS),
+            modifier = if (prefix.isEmpty()) {
+                Modifier.padding(start = GraphStyle.SPACE_XXS)
+            } else {
+                Modifier
+            },
         )
     }
 }

@@ -70,8 +70,8 @@ class CommitPanelUiTest {
                 fixture.manager.activeSession.value?.state?.value?.openDiff != null
             }
             onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
-            onNodeWithText("+new line").assertExists()
-            onNodeWithText("-old line").assertExists()
+            onNodeWithText("new line").assertExists()
+            onNodeWithText("old line").assertExists()
         } finally {
             fixture.close()
         }

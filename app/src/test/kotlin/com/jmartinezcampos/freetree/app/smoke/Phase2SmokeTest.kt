@@ -89,7 +89,7 @@ class Phase2SmokeTest {
                 app.manager.activeSession.value?.state?.value?.openDiff != null
             }
             onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
-            onNodeWithText("+    graphPanel()").assertExists()
+            onNodeWithText("    graphPanel()").assertExists()
             saveScreenshot("03-commit-panel-diff.png")
         } finally {
             app.close()

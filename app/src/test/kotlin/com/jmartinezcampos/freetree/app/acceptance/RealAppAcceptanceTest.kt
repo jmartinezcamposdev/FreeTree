@@ -62,7 +62,7 @@ class RealAppAcceptanceTest {
                 onNodeWithTag(UiTestTags.changedFile("src/App.kt")).performClick()
                 waitUntil(timeoutMillis = 20_000) { state(manager).openDiff != null }
                 onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
-                onNodeWithText("+fun main() = Unit").assertExists()
+                onNodeWithText("fun main() = Unit").assertExists()
 
                 onNodeWithTag(UiTestTags.CHANGES_ROW).performClick()
                 awaitStatus(manager) { it.path == "README.md" && it.worktree == 'M' }
@@ -280,14 +280,14 @@ class RealAppAcceptanceTest {
                     diff != null && !diff.binary
                 }
                 onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
-                onNodeWithText("+two").assertExists()
+                onNodeWithText("two").assertExists()
 
                 onNodeWithTag(UiTestTags.changedFile("binary.bin")).performClick()
                 waitUntil(timeoutMillis = 20_000) {
                     state(manager).openDiff?.binary == true
                 }
                 onNodeWithTag(UiTestTags.DIFF_BINARY).assertExists()
-                assertTrue(state(manager).openDiff?.lines?.none { it.text == "+two" } == true)
+                assertTrue(state(manager).openDiff?.lines?.none { it.text == "two" } == true)
             } finally {
                 manager.close()
                 repo.close()
