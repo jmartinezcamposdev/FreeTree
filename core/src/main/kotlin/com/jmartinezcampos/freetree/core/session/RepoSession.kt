@@ -546,12 +546,36 @@ class RepoSession(
         return refsChanged to headChanged
     }
 
-    private fun publishStatus(activation: Int, status: WorkingStatus) {
+    private fun publishStatus(activation: Int?, status: WorkingStatus) {
         synchronized(lock) {
-            if (!isCurrentLocked(activation)) return
+            if (activation != null && !isCurrentLocked(activation)) return
             _state.update { it.copy(status = status) }
+            clearStaleDiffLocked(status)
         }
     }
+
+    private fun clearStaleDiffLocked(status: WorkingStatus) {
+        val target = _state.value.openDiffTarget ?: return
+        val present = when (target) {
+            is DiffTarget.Unstaged -> status.entries.any { entry ->
+                entry.path == target.path &&
+                    (entry.kind == StatusKind.UNTRACKED || hasWorkTreeChange(entry.worktree))
+            }
+            is DiffTarget.Staged -> status.entries.any { entry ->
+                entry.path == target.path &&
+                    entry.kind != StatusKind.UNMERGED &&
+                    entry.index != '?' &&
+                    hasWorkTreeChange(entry.index)
+            }
+            is DiffTarget.InCommit -> true
+        }
+        if (present) return
+        diffSequence++
+        openDiffUnlimited = false
+        _state.update { it.copy(openDiff = null, openDiffTarget = null) }
+    }
+
+    private fun hasWorkTreeChange(status: Char): Boolean = status != ' ' && status != '.'
 
     private fun publishOperation(activation: Int, repositoryDirs: GitDirs) {
         val operation = try {
@@ -601,11 +625,7 @@ class RepoSession(
             reportReadError(activation, "Status", e)
             return
         }
-        if (activation == null) {
-            _state.update { it.copy(status = status) }
-        } else {
-            publishStatus(activation, status)
-        }
+        publishStatus(activation, status)
         val repositoryDirs = dirs
         if (repositoryDirs != null) {
             if (activation == null) {
@@ -1034,6 +1054,7 @@ class RepoSession(
         try {
             val status = backend.status()
             _state.update { it.copy(status = status) }
+            synchronized(lock) { clearStaleDiffLocked(status) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {

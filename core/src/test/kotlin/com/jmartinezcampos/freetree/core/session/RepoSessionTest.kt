@@ -369,6 +369,37 @@ class RepoSessionTest {
     }
 
     @Test
+    fun statusRefreshClosesDiffWhenTargetNoLongerExists() = runTest {
+        val commits = RandomDag.generate(seed = 43, commitCount = 10)
+        val target = DiffTarget.Unstaged("gone.txt")
+        val status = WorkingStatus(
+            branchHead = commits.first().hash,
+            upstream = null,
+            ahead = 0,
+            behind = 0,
+            unborn = false,
+            entries = listOf(StatusEntry("gone.txt", null, ' ', '?', StatusKind.UNTRACKED)),
+        )
+        val backend = backend(commits, status = status)
+        backend.diffs = mapOf(target to DiffText(emptyList(), binary = false, truncated = false))
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+
+        session.openDiff(target)
+        advanceUntilIdle()
+        assertNotNull(session.state.value.openDiff)
+
+        backend.status = status.copy(entries = emptyList())
+        session.refresh()
+        advanceUntilIdle()
+
+        assertNull(session.state.value.openDiff)
+        assertNull(session.state.value.openDiffTarget)
+        session.close()
+    }
+
+    @Test
     fun selectionCancelsPendingDiff() = runTest {
         val commits = RandomDag.generate(seed = 38, commitCount = 20)
         val backend = backend(commits)

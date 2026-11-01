@@ -10,6 +10,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
+import com.jmartinezcampos.freetree.core.model.DiffTarget
+import com.jmartinezcampos.freetree.core.model.DiffText
 import com.jmartinezcampos.freetree.core.model.GitRef
 import com.jmartinezcampos.freetree.core.model.HeadInfo
 import com.jmartinezcampos.freetree.core.model.RawCommit
@@ -91,6 +93,51 @@ class ChangesPanelUiTest {
                     fixture.backend.callCount(FakeMethod.STAGE) == 1
                 }
                 assertEquals(listOf("README.md"), fixture.backend.callsOf(FakeMethod.STAGE).single().paths)
+            } finally {
+                fixture.close()
+            }
+        }
+
+    @Test
+    fun deletingOpenUnstagedFileClosesDiffAndShowsCleanState() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val status = WorkingStatus(
+                commits[1].hash,
+                null,
+                0,
+                0,
+                false,
+                listOf(StatusEntry("README.md", null, ' ', 'M', StatusKind.ORDINARY)),
+            )
+            val target = DiffTarget.Unstaged("README.md")
+            val fixture = uiFixture(
+                commits = commits,
+                refs = refs,
+                head = HeadInfo(commits[1].hash, "main"),
+                status = status,
+                diffs = mapOf(target to DiffText(emptyList(), binary = false, truncated = false)),
+            )
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.status != null
+                }
+
+                onNodeWithTag(UiTestTags.unstagedFile("README.md")).performClick()
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.openDiff != null
+                }
+                onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
+
+                fixture.backend.status = status.copy(entries = emptyList())
+                fixture.manager.activeSession.value!!.refresh()
+                waitUntil(timeoutMillis = 5_000) {
+                    val state = fixture.manager.activeSession.value?.state?.value
+                    state?.status?.entries?.isEmpty() == true && state.openDiffTarget == null
+                }
+
+                onNodeWithTag(UiTestTags.DIFF_VIEW).assertDoesNotExist()
+                onNodeWithText("Working tree clean").assertExists()
             } finally {
                 fixture.close()
             }
