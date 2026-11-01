@@ -25,6 +25,23 @@ import kotlin.test.assertEquals
 class GraphListUiTest {
 
     @Test
+    fun chipAppearanceHighlightsCurrentBranchAndHead() {
+        val colors = GraphStyle.dark
+        assertEquals(
+            colors.chipCurrentBranchBackground to colors.chipCurrentBranchForeground,
+            chipAppearance(RefKind.LOCAL_BRANCH, isHead = false, isCurrentBranch = true, colors),
+        )
+        assertEquals(
+            colors.chipHeadBackground to colors.chipHeadForeground,
+            chipAppearance(RefKind.LOCAL_BRANCH, isHead = true, isCurrentBranch = true, colors),
+        )
+        assertEquals(
+            colors.chipLocalBackground to colors.chipLocalForeground,
+            chipAppearance(RefKind.LOCAL_BRANCH, isHead = false, isCurrentBranch = false, colors),
+        )
+    }
+
+    @Test
     fun changesRowIsItemZeroAndCommitRowsRenderWithChips() = runDesktopComposeUiTest(width = 1400, height = 900) {
         val commits = RandomDag.generate(seed = 7, commitCount = 12)
         val refs = listOf(
@@ -79,6 +96,7 @@ class GraphListUiTest {
                 }
             }
             onNodeWithText("HEAD").assertExists()
+            saveScreenshot("23-head-chip.png")
         } finally {
             fixture.close()
         }

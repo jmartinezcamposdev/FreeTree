@@ -677,7 +677,18 @@ private fun RefChips(refs: List<GitRef>, isHead: Boolean) {
     val colors = LocalGraphColors.current
     val allChips = buildList {
         if (isHead) add(ChipLabel("HEAD", RefKind.LOCAL_BRANCH, head = true))
-        refs.forEach { add(ChipLabel(it.shortName, it.kind, head = false)) }
+        val current = refs.filter { it.isCurrentBranch }
+        val others = refs.filterNot { it.isCurrentBranch }
+        (current + others).forEach {
+            add(
+                ChipLabel(
+                    text = it.shortName,
+                    kind = it.kind,
+                    head = false,
+                    currentBranch = it.isCurrentBranch,
+                ),
+            )
+        }
     }
     if (allChips.isEmpty()) return
     val visible = allChips.take(GraphStyle.CHIP_MAX)
@@ -687,8 +698,18 @@ private fun RefChips(refs: List<GitRef>, isHead: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         visible.forEach { chip ->
-            val (background, foreground) = chipAppearance(chip.kind, chip.head, colors)
-            Chip(text = chip.text, background = background, foreground = foreground)
+            val (background, foreground) = chipAppearance(
+                kind = chip.kind,
+                isHead = chip.head,
+                isCurrentBranch = chip.currentBranch,
+                colors = colors,
+            )
+            Chip(
+                text = chip.text,
+                background = background,
+                foreground = foreground,
+                bold = chip.head || chip.currentBranch,
+            )
         }
         if (hidden.isNotEmpty()) {
             TooltipArea(
@@ -717,10 +738,20 @@ private fun RefChips(refs: List<GitRef>, isHead: Boolean) {
     }
 }
 
-private data class ChipLabel(val text: String, val kind: RefKind, val head: Boolean)
+private data class ChipLabel(
+    val text: String,
+    val kind: RefKind,
+    val head: Boolean,
+    val currentBranch: Boolean = false,
+)
 
 @Composable
-private fun Chip(text: String, background: Color, foreground: Color) {
+private fun Chip(
+    text: String,
+    background: Color,
+    foreground: Color,
+    bold: Boolean = false,
+) {
     Box(
         modifier = Modifier
             .background(background, RoundedCornerShape(GraphStyle.CHIP_CORNER_RADIUS))
@@ -729,6 +760,7 @@ private fun Chip(text: String, background: Color, foreground: Color) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             color = foreground,
             maxLines = GraphStyle.MAX_TEXT_LINES,
         )

@@ -249,21 +249,21 @@ internal fun Toolbar(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ToolbarButton(
-                text = "Pull",
-                tag = UiTestTags.PULL,
-                iconTag = UiTestTags.PULL_ICON,
-                icon = { color, stroke -> drawPullIcon(color, stroke) },
-                enabled = session != null && !busy,
-                onClick = { session?.pull() },
-            )
-            Spacer(Modifier.width(GraphStyle.TOOLBAR_BUTTON_GAP))
-            ToolbarButton(
                 text = "Push",
                 tag = UiTestTags.PUSH,
                 iconTag = UiTestTags.PUSH_ICON,
                 icon = { color, stroke -> drawPushIcon(color, stroke) },
                 enabled = session != null && !busy,
                 onClick = { session?.push() },
+            )
+            Spacer(Modifier.width(GraphStyle.TOOLBAR_BUTTON_GAP))
+            ToolbarButton(
+                text = "Pull",
+                tag = UiTestTags.PULL,
+                iconTag = UiTestTags.PULL_ICON,
+                icon = { color, stroke -> drawPullIcon(color, stroke) },
+                enabled = session != null && !busy,
+                onClick = { session?.pull() },
             )
             if (status != null) {
                 Spacer(Modifier.width(GraphStyle.TOOLBAR_STATUS_GAP))

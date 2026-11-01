@@ -43,9 +43,16 @@ fun statusColor(status: Char, colors: GraphColors) = when (status) {
     else -> colors.statusModified
 }
 
-fun chipAppearance(kind: RefKind, isHead: Boolean, colors: GraphColors): Pair<Color, Color> =
+fun chipAppearance(
+    kind: RefKind,
+    isHead: Boolean,
+    isCurrentBranch: Boolean,
+    colors: GraphColors,
+): Pair<Color, Color> =
     when {
         isHead -> colors.chipHeadBackground to colors.chipHeadForeground
+        isCurrentBranch && kind == RefKind.LOCAL_BRANCH ->
+            colors.chipCurrentBranchBackground to colors.chipCurrentBranchForeground
         kind == RefKind.LOCAL_BRANCH -> colors.chipLocalBackground to colors.chipLocalForeground
         kind == RefKind.REMOTE_BRANCH -> colors.chipRemoteBackground to colors.chipRemoteForeground
         else -> colors.chipTagBackground to colors.chipTagForeground
