@@ -72,6 +72,8 @@ object UiTestTags {
     const val DISMISS_MESSAGE = "dismiss-message"
 
     const val CONTEXT_MENU = "context-menu"
+    const val DIALOG_SCRIM = "dialog-scrim"
+    const val ABOUT_DIALOG = "about-dialog"
     const val COMMIT_NAME_DIALOG = "commit-name-dialog"
     const val COMMIT_NAME_INPUT = "commit-name-input"
     const val COMMIT_NAME_ERROR = "commit-name-error"
@@ -86,12 +88,17 @@ object UiTestTags {
     const val DISCARD_DIALOG = "discard-dialog"
     const val DISCARD_CONFIRM = "discard-confirm"
     const val DISCARD_CANCEL = "discard-cancel"
+    const val DISCARD_ALL_DIALOG = "discard-all-dialog"
+    const val DISCARD_ALL_CONFIRM = "discard-all-confirm"
+    const val DISCARD_ALL_CANCEL = "discard-all-cancel"
 
     const val MESSAGES_WINDOW = "messages-window"
     const val MESSAGES_LIST = "messages-list"
     const val MESSAGES_EMPTY = "messages-empty"
 
     const val PREFERENCES_WINDOW = "preferences-window"
+    const val PREFERENCES_APPEARANCE = "preferences-appearance"
+    const val PREFERENCES_HISTORY = "preferences-history"
     const val THEME_SYSTEM = "theme-system"
     const val THEME_LIGHT = "theme-light"
     const val THEME_DARK = "theme-dark"

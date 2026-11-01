@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -51,6 +50,7 @@ internal fun ChangesPanel(
     session: RepoSession?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
     settingsController: AppSettingsController,
+    onDiscardRequest: (StatusEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
@@ -60,8 +60,6 @@ internal fun ChangesPanel(
     }
     val conflicts = status?.entries.orEmpty().filter { it.kind == StatusKind.UNMERGED }
     var message by remember(session?.id) { mutableStateOf("") }
-    // Keyed by session too: switching tabs must not leave a confirmation for another repository.
-    var pendingDiscard by remember(session?.id) { mutableStateOf<StatusEntry?>(null) }
     val changesScrollState = rememberScrollState()
     var filesFraction by remember {
         mutableFloatStateOf(settingsController.state.value.changesFilesFraction)
@@ -108,7 +106,7 @@ internal fun ChangesPanel(
                         session = session,
                         scrollState = changesScrollState,
                         busy = busy,
-                        onPendingDiscard = { pendingDiscard = it },
+                        onPendingDiscard = onDiscardRequest,
                         modifier = Modifier.weight(filesFraction),
                     )
                     HorizontalSplitter(
@@ -143,7 +141,7 @@ internal fun ChangesPanel(
                     session = session,
                     scrollState = changesScrollState,
                     busy = busy,
-                    onPendingDiscard = { pendingDiscard = it },
+                    onPendingDiscard = onDiscardRequest,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -212,17 +210,6 @@ internal fun ChangesPanel(
         }
     }
 
-    val discard = pendingDiscard
-    if (discard != null) {
-        DiscardDialog(
-            entry = discard,
-            onDismiss = { pendingDiscard = null },
-            onConfirm = {
-                session?.discardUnstaged(listOf(discard.path))
-                pendingDiscard = null
-            },
-        )
-    }
 }
 
 @Composable
@@ -461,40 +448,4 @@ private fun ChangeFileRow(
             actions?.invoke()
         }
     }
-}
-
-@Composable
-private fun DiscardDialog(
-    entry: StatusEntry,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    val warning = if (entry.kind == StatusKind.UNTRACKED) {
-        "This permanently deletes \"${entry.path}\" from disk. This cannot be undone."
-    } else {
-        "This restores \"${entry.path}\" from the index and permanently discards its unstaged " +
-            "changes on disk. The staged content is kept. This cannot be undone."
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.testTag(UiTestTags.DISCARD_DIALOG),
-        title = { Text("Discard unstaged changes?") },
-        text = { Text(warning) },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                modifier = Modifier.testTag(UiTestTags.DISCARD_CONFIRM),
-            ) {
-                Text("Discard changes")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag(UiTestTags.DISCARD_CANCEL),
-            ) {
-                Text("Cancel")
-            }
-        },
-    )
 }

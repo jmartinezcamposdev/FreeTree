@@ -75,7 +75,7 @@ class MessagesWindowUiTest {
 
     @Test
     fun themeOptionsInvokeTheSelectedMode() =
-        runDesktopComposeUiTest(width = 500, height = 500) {
+        runDesktopComposeUiTest(width = 720, height = 520) {
             var selected: ThemeMode? = null
             setContent {
                 AppTheme(ThemeMode.SYSTEM) {
@@ -100,7 +100,7 @@ class MessagesWindowUiTest {
 
     @Test
     fun historyOptionsInvokeCallbacks() =
-        runDesktopComposeUiTest(width = 500, height = 500) {
+        runDesktopComposeUiTest(width = 720, height = 520) {
             var historyMode by mutableStateOf(HistoryViewMode.COMPACT)
             var showDate by mutableStateOf(true)
             setContent {
@@ -116,6 +116,8 @@ class MessagesWindowUiTest {
                 }
             }
 
+            onNodeWithTag(UiTestTags.PREFERENCES_HISTORY).performClick()
+            waitForIdle()
             onNodeWithTag(UiTestTags.HISTORY_COMPACT).assertExists()
             onNodeWithTag(UiTestTags.HISTORY_SHOW_DATE).assertExists()
 

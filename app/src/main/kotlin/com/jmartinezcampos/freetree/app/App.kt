@@ -44,14 +44,14 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import com.jmartinezcampos.freetree.app.ui.AppDialog
+import com.jmartinezcampos.freetree.app.ui.AppDialogController
 import com.jmartinezcampos.freetree.app.ui.AppSettingsController
 import com.jmartinezcampos.freetree.app.ui.AppTheme
 import com.jmartinezcampos.freetree.app.ui.ChangesPanel
-import com.jmartinezcampos.freetree.app.ui.CommitActionDialog
-import com.jmartinezcampos.freetree.app.ui.CommitActionDialogHost
 import com.jmartinezcampos.freetree.app.ui.CommitMenuAction
-import com.jmartinezcampos.freetree.app.ui.CommitNameKind
 import com.jmartinezcampos.freetree.app.ui.CommitPanel
+import com.jmartinezcampos.freetree.app.ui.FreeTreeDialogHost
 import com.jmartinezcampos.freetree.app.ui.GraphList
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
 import com.jmartinezcampos.freetree.app.ui.HistoryViewMode
@@ -62,8 +62,11 @@ import com.jmartinezcampos.freetree.app.ui.ThemeMode
 import com.jmartinezcampos.freetree.app.ui.Toolbar
 import com.jmartinezcampos.freetree.app.ui.UiTestTags
 import com.jmartinezcampos.freetree.app.ui.VerticalSplitter
+import com.jmartinezcampos.freetree.app.ui.validateRefName
 import com.jmartinezcampos.freetree.app.ui.resizePaneFraction
 import com.jmartinezcampos.freetree.core.model.DiffTarget
+import com.jmartinezcampos.freetree.core.model.StatusEntry
+import com.jmartinezcampos.freetree.core.model.StatusKind
 import com.jmartinezcampos.freetree.core.session.RepoSession
 import com.jmartinezcampos.freetree.core.session.RepoUiState
 import com.jmartinezcampos.freetree.core.session.Selection
@@ -81,6 +84,7 @@ internal fun App(
         session.openDiff(target, unlimited = true)
     },
     settingsController: AppSettingsController? = null,
+    dialogController: AppDialogController? = null,
     themeMode: ThemeMode = ThemeMode.SYSTEM,
     historyViewMode: HistoryViewMode = HistoryViewMode.COMPACT,
     showHistoryDate: Boolean = true,
@@ -88,6 +92,7 @@ internal fun App(
     val resolvedSettings = settingsController ?: remember {
         AppSettingsController(InMemorySettingsStore())
     }
+    val resolvedDialogs = dialogController ?: remember { AppDialogController() }
     AppTheme(themeMode) {
         Surface(modifier = Modifier.fillMaxSize()) {
             AppContent(
@@ -95,6 +100,7 @@ internal fun App(
                 onOpenRepository = onOpenRepository,
                 loadFullDiff = loadFullDiff,
                 settingsController = resolvedSettings,
+                dialogController = resolvedDialogs,
                 historyViewMode = historyViewMode,
                 showHistoryDate = showHistoryDate,
             )
@@ -108,6 +114,7 @@ private fun AppContent(
     onOpenRepository: (() -> Unit)?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
     settingsController: AppSettingsController,
+    dialogController: AppDialogController,
     historyViewMode: HistoryViewMode,
     showHistoryDate: Boolean,
 ) {
@@ -118,7 +125,11 @@ private fun AppContent(
     val emptyState = remember { MutableStateFlow(RepoUiState()) }
     val stateFlow = activeSession?.state ?: emptyState
     val state by stateFlow.collectAsState()
+    val activeDialog by dialogController.dialog.collectAsState()
     val session = activeSession
+    LaunchedEffect(session?.id) {
+        dialogController.dismiss()
+    }
     var graphFraction by remember {
         mutableFloatStateOf(settingsController.state.value.graphPaneFraction)
     }
@@ -127,9 +138,6 @@ private fun AppContent(
         onDispose { settingsController.setGraphPaneFraction(latestGraphFraction.value) }
     }
     val coroutineScope = rememberCoroutineScope()
-    var commitDialog by remember(session?.id) {
-        mutableStateOf<CommitActionDialog?>(null)
-    }
 
     fun handleCommitAction(action: CommitMenuAction) {
         val active = session ?: return
@@ -142,10 +150,30 @@ private fun AppContent(
                 action.remoteRef,
             )
             is CommitMenuAction.CreateBranch -> {
-                commitDialog = CommitActionDialog.CreateName(CommitNameKind.BRANCH, action.hash)
+                dialogController.show(
+                    AppDialog.Prompt(
+                        tag = UiTestTags.COMMIT_NAME_DIALOG,
+                        title = "Create branch here",
+                        description = "Create a branch at this commit and check it out.",
+                        fieldLabel = "Branch name",
+                        confirmLabel = "Create and checkout",
+                        validate = { validateRefName(it, isBranch = true) },
+                        onConfirm = { name -> active.createBranchAndCheckout(name, action.hash) },
+                    ),
+                )
             }
             is CommitMenuAction.CreateTag -> {
-                commitDialog = CommitActionDialog.CreateName(CommitNameKind.TAG, action.hash)
+                dialogController.show(
+                    AppDialog.Prompt(
+                        tag = UiTestTags.COMMIT_NAME_DIALOG,
+                        title = "Create tag here",
+                        description = "Create a lightweight tag at this commit.",
+                        fieldLabel = "Tag name",
+                        confirmLabel = "Create tag",
+                        validate = { validateRefName(it, isBranch = false) },
+                        onConfirm = { name -> active.createTag(name, action.hash) },
+                    ),
+                )
             }
             is CommitMenuAction.DeleteLocal -> {
                 coroutineScope.launch {
@@ -160,7 +188,20 @@ private fun AppContent(
                     if (safe) {
                         active.deleteLocalBranch(action.branch)
                     } else {
-                        commitDialog = CommitActionDialog.DeleteLocal(action.branch, safe = false)
+                        dialogController.show(
+                            AppDialog.Confirm(
+                                tag = UiTestTags.DELETE_BRANCH_DIALOG,
+                                title = "Branch not fully merged",
+                                message = "The branch \"${action.branch}\" contains commits that are not " +
+                                    "reachable from the current HEAD or another local branch.",
+                                warning = "Deleting it may lose those commits.",
+                                confirmLabel = "Delete anyway",
+                                destructive = true,
+                                onConfirm = {
+                                    active.deleteLocalBranch(action.branch, force = true)
+                                },
+                            ),
+                        )
                     }
                 }
             }
@@ -174,10 +215,23 @@ private fun AppContent(
                         false
                     }
                     if (sessionManager.activeSession.value?.id != active.id) return@launch
-                    commitDialog = CommitActionDialog.DeleteRemote(
-                        remote = action.remote,
-                        branch = action.branch,
-                        safe = safe,
+                    dialogController.show(
+                        AppDialog.Confirm(
+                            tag = UiTestTags.DELETE_BRANCH_DIALOG,
+                            title = "Delete remote branch",
+                            message = "Delete remote branch \"${action.remote}/${action.branch}\"? " +
+                                "This removes the branch from the remote and cannot be undone.",
+                            warning = if (safe) {
+                                null
+                            } else {
+                                "This branch is not merged into the current HEAD or another local branch."
+                            },
+                            confirmLabel = "Delete remote branch",
+                            destructive = true,
+                            onConfirm = {
+                                active.deleteRemoteBranch(action.remote, action.branch)
+                            },
+                        ),
                     )
                 }
             }
@@ -217,13 +271,14 @@ private fun AppContent(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(colors.background)
-            .testTag(UiTestTags.APP)
-            .onPreviewKeyEvent(::handleShortcut),
-    ) {
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(colors.background)
+                .testTag(UiTestTags.APP)
+                .onPreviewKeyEvent(::handleShortcut),
+        ) {
         TabBar(
             tabs = tabs,
             activeId = activeId,
@@ -232,7 +287,19 @@ private fun AppContent(
             onOpen = { onOpenRepository?.invoke() },
         )
         Divider()
-        Toolbar(state = state, session = session)
+        Toolbar(
+            state = state,
+            session = session,
+            onFiltersClick = {
+                dialogController.show(
+                    AppDialog.Info(
+                        tag = UiTestTags.FILTERS_INFO_DIALOG,
+                        title = "Filters",
+                        message = "Editing filters will be supported in a future version of FreeTree.",
+                    ),
+                )
+            },
+        )
         Divider()
 
         if (session == null) {
@@ -286,6 +353,26 @@ private fun AppContent(
                         session = session,
                         loadFullDiff = loadFullDiff,
                         settingsController = settingsController,
+                        onDiscardRequest = { entry ->
+                            dialogController.show(
+                                AppDialog.Confirm(
+                                    tag = UiTestTags.DISCARD_DIALOG,
+                                    title = "Discard unstaged changes?",
+                                    message = if (entry.kind == StatusKind.UNTRACKED) {
+                                        "This permanently deletes \"${entry.path}\" from disk."
+                                    } else {
+                                        "This restores \"${entry.path}\" from the index and discards its " +
+                                            "unstaged changes on disk. The staged content is kept."
+                                    },
+                                    warning = "This cannot be undone.",
+                                    confirmLabel = "Discard changes",
+                                    destructive = true,
+                                    onConfirm = {
+                                        session.discardUnstaged(listOf(entry.path))
+                                    },
+                                ),
+                            )
+                        },
                         modifier = Modifier.weight(1f - graphFraction),
                     )
                 }
@@ -297,27 +384,10 @@ private fun AppContent(
             Divider()
             MessageBar(message = message, onDismiss = { session?.clearMessage() })
         }
-    }
+        }
 
-    CommitActionDialogHost(
-        dialog = commitDialog,
-        onCreateName = { kind, name, hash ->
-            when (kind) {
-                CommitNameKind.BRANCH -> session?.createBranchAndCheckout(name, hash)
-                CommitNameKind.TAG -> session?.createTag(name, hash)
-            }
-            commitDialog = null
-        },
-        onDeleteLocal = { branch ->
-            session?.deleteLocalBranch(branch, force = true)
-            commitDialog = null
-        },
-        onDeleteRemote = { remote, branch ->
-            session?.deleteRemoteBranch(remote, branch)
-            commitDialog = null
-        },
-        onDismiss = { commitDialog = null },
-    )
+        FreeTreeDialogHost(dialog = activeDialog, controller = dialogController)
+    }
 }
 
 @Composable
@@ -326,6 +396,7 @@ private fun DetailPane(
     session: RepoSession,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
     settingsController: AppSettingsController,
+    onDiscardRequest: (StatusEntry) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (val selection = state.selection) {
@@ -341,6 +412,7 @@ private fun DetailPane(
             session = session,
             loadFullDiff = loadFullDiff,
             settingsController = settingsController,
+            onDiscardRequest = onDiscardRequest,
             modifier = modifier,
         )
     }

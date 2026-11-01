@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
+import com.jmartinezcampos.freetree.app.smoke.saveScreenshot
 import com.jmartinezcampos.freetree.core.model.DiffTarget
 import com.jmartinezcampos.freetree.core.model.DiffText
 import com.jmartinezcampos.freetree.core.model.GitRef
@@ -175,6 +176,7 @@ class ChangesPanelUiTest {
                 onNodeWithTag(UiTestTags.discardUnstaged("README.md")).performClick()
                 onNodeWithText("restores \"README.md\" from the index", substring = true).assertExists()
                 onNodeWithText("The staged content is kept.", substring = true).assertExists()
+                saveScreenshot("27-discard-file-dialog.png")
                 onNodeWithTag(UiTestTags.DISCARD_CONFIRM).performClick()
                 waitUntil(timeoutMillis = 5_000) {
                     fixture.backend.callCount(FakeMethod.DISCARD_UNSTAGED) == 1

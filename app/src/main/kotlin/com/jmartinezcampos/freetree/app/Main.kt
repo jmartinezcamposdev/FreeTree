@@ -15,14 +15,14 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import com.jmartinezcampos.freetree.app.menu.AboutDialog
 import com.jmartinezcampos.freetree.app.menu.AppCommand
 import com.jmartinezcampos.freetree.app.menu.AppMenuBar
-import com.jmartinezcampos.freetree.app.menu.DiscardUnstagedDialog
 import com.jmartinezcampos.freetree.app.menu.RecentRepositories
 import com.jmartinezcampos.freetree.app.menu.SettingsRecentRepositoriesStore
 import com.jmartinezcampos.freetree.app.menu.stagedPaths
 import com.jmartinezcampos.freetree.app.menu.unstagedPaths
+import com.jmartinezcampos.freetree.app.ui.AppDialog
+import com.jmartinezcampos.freetree.app.ui.AppDialogController
 import com.jmartinezcampos.freetree.app.ui.AppSettingsController
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
 import com.jmartinezcampos.freetree.app.ui.JsonSettingsStore
@@ -31,6 +31,7 @@ import com.jmartinezcampos.freetree.app.ui.MessagesWindow
 import com.jmartinezcampos.freetree.app.ui.PreferencesWindow
 import com.jmartinezcampos.freetree.app.ui.captureWindowState
 import com.jmartinezcampos.freetree.app.ui.readDesktopScreens
+import com.jmartinezcampos.freetree.app.ui.UiTestTags
 import com.jmartinezcampos.freetree.app.ui.readLegacySettings
 import com.jmartinezcampos.freetree.app.ui.resolveWindowBounds
 import com.jmartinezcampos.freetree.core.session.MessageLog
@@ -40,11 +41,12 @@ import java.awt.Desktop
 import java.awt.Frame
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
-import javax.swing.JFileChooser
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
+
+private val appFolderPicker = NativeFolderPicker()
 
 fun main(args: Array<String>) {
     System.setProperty("apple.awt.application.name", "FreeTree")
@@ -63,6 +65,7 @@ fun main(args: Array<String>) {
             )
         }
         val settings by settingsController.state.collectAsState()
+        val dialogController = remember { AppDialogController() }
         val themeMode = settings.themeMode
         val historyViewMode = settings.historyViewMode
         val showHistoryDate = settings.showHistoryDate
@@ -98,14 +101,12 @@ fun main(args: Array<String>) {
                 recentRepositories.record(path)
             }
         }
-        var showAbout by remember { mutableStateOf(false) }
         var showMessages by remember { mutableStateOf(false) }
         var showPreferences by remember { mutableStateOf(false) }
-        var discardRequest by remember { mutableStateOf<DiscardRequest?>(null) }
 
         LaunchedEffect(aboutRequested) {
             if (aboutRequested) {
-                showAbout = true
+                dialogController.show(AppDialog.About)
                 aboutRequests.value = false
             }
         }
@@ -163,7 +164,7 @@ fun main(args: Array<String>) {
             fun handleCommand(command: AppCommand) {
                 val session = manager.activeSession.value
                 when (command) {
-                    AppCommand.OpenRepository -> chooseRepository(openRepository)
+                    AppCommand.OpenRepository -> chooseRepository(openRepository, window)
                     is AppCommand.OpenRecent -> openRepository(command.path)
                     AppCommand.CloseTab -> manager.activeId.value?.let(manager::closeTab)
                     AppCommand.Exit -> exitApplication()
@@ -180,7 +181,20 @@ fun main(args: Array<String>) {
                     }
                     AppCommand.DiscardUnstaged -> session?.let { active ->
                         val paths = active.state.value.status.unstagedPaths()
-                        if (paths.isNotEmpty()) discardRequest = DiscardRequest(active, paths)
+                        if (paths.isNotEmpty()) {
+                            dialogController.show(
+                                AppDialog.Confirm(
+                                    tag = UiTestTags.DISCARD_ALL_DIALOG,
+                                    title = "Discard unstaged changes",
+                                    message = "Discard unstaged changes in ${paths.size} file(s)?",
+                                    warning = "Tracked files will be restored from the index. Untracked files " +
+                                        "will be deleted from disk.",
+                                    confirmLabel = "Discard",
+                                    destructive = true,
+                                    onConfirm = { active.discardUnstaged(paths) },
+                                ),
+                            )
+                        }
                     }
                     AppCommand.ShowRemotes -> session?.let { active ->
                         active.setShowRemotes(!active.state.value.showRemotes)
@@ -192,7 +206,7 @@ fun main(args: Array<String>) {
                     AppCommand.PreviousTab -> activateRelativeTab(-1)
                     AppCommand.Minimize -> window.extendedState =
                         window.extendedState or Frame.ICONIFIED
-                    AppCommand.About -> showAbout = true
+                    AppCommand.About -> dialogController.show(AppDialog.About)
                     AppCommand.MessagesLog -> showMessages = true
                     AppCommand.Preferences -> showPreferences = true
                 }
@@ -205,29 +219,13 @@ fun main(args: Array<String>) {
             )
             App(
                 sessionManager = manager,
-                onOpenRepository = { chooseRepository(openRepository) },
+                onOpenRepository = { chooseRepository(openRepository, window) },
                 settingsController = settingsController,
+                dialogController = dialogController,
                 themeMode = themeMode,
                 historyViewMode = historyViewMode,
                 showHistoryDate = showHistoryDate,
             )
-            if (showAbout) {
-                AboutDialog(
-                    themeMode = themeMode,
-                    onDismiss = { showAbout = false },
-                )
-            }
-            discardRequest?.let { request ->
-                DiscardUnstagedDialog(
-                    themeMode = themeMode,
-                    fileCount = request.paths.size,
-                    onConfirm = {
-                        request.session.discardUnstaged(request.paths)
-                        discardRequest = null
-                    },
-                    onDismiss = { discardRequest = null },
-                )
-            }
         }
         if (showMessages) {
             MessagesWindow(
@@ -249,11 +247,6 @@ fun main(args: Array<String>) {
         }
     }
 }
-
-private data class DiscardRequest(
-    val session: RepoSession,
-    val paths: List<String>,
-)
 
 private const val WINDOW_STATE_SAVE_DELAY_MILLIS = 350L
 
@@ -308,12 +301,6 @@ private fun startupRepository(args: Array<String>): Path? {
     }
 }
 
-private fun chooseRepository(onOpen: (Path) -> Unit) {
-    val chooser = JFileChooser().apply {
-        dialogTitle = "Open Git repository"
-        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-    }
-    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-        chooser.selectedFile?.toPath()?.let(onOpen)
-    }
+private fun chooseRepository(onOpen: (Path) -> Unit, owner: java.awt.Window?) {
+    appFolderPicker.pickFolder(owner)?.let(onOpen)
 }

@@ -1,28 +1,43 @@
 package com.jmartinezcampos.freetree.app.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.rememberWindowState
+
+private enum class PreferencesSection {
+    APPEARANCE,
+    HISTORY,
+}
 
 @Composable
 internal fun PreferencesWindow(
@@ -41,7 +56,7 @@ internal fun PreferencesWindow(
             width = GraphStyle.PREFERENCES_WINDOW_WIDTH,
             height = GraphStyle.PREFERENCES_WINDOW_HEIGHT,
         ),
-        resizable = false,
+        resizable = true,
     ) {
         AppTheme(themeMode) {
             PreferencesContent(
@@ -66,104 +81,215 @@ internal fun PreferencesContent(
     onShowHistoryDateChange: (Boolean) -> Unit = {},
 ) {
     val colors = LocalGraphColors.current
-    Column(
+    var section by remember { mutableStateOf(PreferencesSection.APPEARANCE) }
+    Row(
         modifier = Modifier
             .fillMaxSize()
             .background(colors.background)
-            .padding(GraphStyle.SPACE_XL)
             .testTag(UiTestTags.PREFERENCES_WINDOW),
-        verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
     ) {
-        Text(
-            text = "Appearance",
-            style = MaterialTheme.typography.titleSmall,
-            color = colors.onSurface,
-        )
-        Text(
-            text = "Theme",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceMuted,
-        )
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = GraphStyle.SPACE_XS),
-            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
-            verticalAlignment = Alignment.CenterVertically,
+                .width(GraphStyle.PREFERENCES_NAV_WIDTH)
+                .fillMaxHeight()
+                .background(colors.surface)
+                .padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XL),
+            verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
         ) {
-            ThemeMode.entries.forEach { mode ->
-                OptionButton(
-                    label = mode.label(),
-                    selected = mode == themeMode,
-                    testTag = mode.testTag(),
-                    onClick = { onThemeModeChange(mode) },
-                )
-            }
+            Text(
+                text = "Preferences",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.onSurface,
+                modifier = Modifier.padding(horizontal = GraphStyle.SPACE_SM),
+            )
+            Spacer(Modifier.height(GraphStyle.SPACE_MD))
+            PreferencesNavItem(
+                label = "Appearance",
+                selected = section == PreferencesSection.APPEARANCE,
+                tag = UiTestTags.PREFERENCES_APPEARANCE,
+                onClick = { section = PreferencesSection.APPEARANCE },
+            )
+            PreferencesNavItem(
+                label = "Git history",
+                selected = section == PreferencesSection.HISTORY,
+                tag = UiTestTags.PREFERENCES_HISTORY,
+                onClick = { section = PreferencesSection.HISTORY },
+            )
         }
-        Text(
-            text = "System follows the operating system appearance.",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceMuted,
-            modifier = Modifier.padding(top = GraphStyle.SPACE_XS),
-        )
-
-        Spacer(Modifier.height(GraphStyle.SPACE_SM))
         Box(
             Modifier
-                .fillMaxWidth()
-                .height(GraphStyle.DIVIDER_THICKNESS)
+                .fillMaxHeight()
+                .width(GraphStyle.DIVIDER_THICKNESS)
                 .background(colors.divider),
         )
-        Spacer(Modifier.height(GraphStyle.SPACE_SM))
-
-        Text(
-            text = "Git history",
-            style = MaterialTheme.typography.titleSmall,
-            color = colors.onSurface,
-        )
-        Text(
-            text = "Commit rows",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceMuted,
-        )
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = GraphStyle.SPACE_XS),
-            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
-            verticalAlignment = Alignment.CenterVertically,
+                .weight(GraphStyle.FILL_WEIGHT)
+                .fillMaxHeight()
+                .verticalScroll(rememberScrollState())
+                .padding(
+                    horizontal = GraphStyle.PREFERENCES_CONTENT_PADDING,
+                    vertical = GraphStyle.SPACE_XL,
+                ),
+            verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_MD),
         ) {
-            HistoryViewMode.entries.forEach { mode ->
-                OptionButton(
-                    label = mode.label(),
-                    selected = mode == historyViewMode,
-                    testTag = mode.testTag(),
-                    onClick = { onHistoryViewModeChange(mode) },
+            when (section) {
+                PreferencesSection.APPEARANCE -> AppearanceSection(
+                    themeMode = themeMode,
+                    onThemeModeChange = onThemeModeChange,
+                )
+                PreferencesSection.HISTORY -> HistorySection(
+                    historyViewMode = historyViewMode,
+                    onHistoryViewModeChange = onHistoryViewModeChange,
+                    showHistoryDate = showHistoryDate,
+                    onShowHistoryDateChange = onShowHistoryDateChange,
                 )
             }
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = GraphStyle.SPACE_XS),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(
-                checked = showHistoryDate,
-                onCheckedChange = onShowHistoryDateChange,
-                modifier = Modifier.testTag(UiTestTags.HISTORY_SHOW_DATE),
-            )
-            Spacer(Modifier.width(GraphStyle.SPACE_SM))
-            Text(
-                text = "Show date and time",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurface,
+    }
+}
+
+@Composable
+private fun AppearanceSection(
+    themeMode: ThemeMode,
+    onThemeModeChange: (ThemeMode) -> Unit,
+) {
+    val colors = LocalGraphColors.current
+    SettingsHeader(
+        title = "Appearance",
+        description = "Choose how FreeTree looks. System follows the operating system appearance.",
+    )
+    SettingsLabel("Theme")
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ThemeMode.entries.forEach { mode ->
+            OptionButton(
+                label = mode.label(),
+                selected = mode == themeMode,
+                testTag = mode.testTag(),
+                onClick = { onThemeModeChange(mode) },
             )
         }
+    }
+    SettingsHint("Changes apply immediately across all windows.")
+}
+
+@Composable
+private fun HistorySection(
+    historyViewMode: HistoryViewMode,
+    onHistoryViewModeChange: (HistoryViewMode) -> Unit,
+    showHistoryDate: Boolean,
+    onShowHistoryDateChange: (Boolean) -> Unit,
+) {
+    SettingsHeader(
+        title = "Git history",
+        description = "Control how commit rows are laid out in the history graph.",
+    )
+    SettingsLabel("Commit row layout")
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HistoryViewMode.entries.forEach { mode ->
+            OptionButton(
+                label = mode.label(),
+                selected = mode == historyViewMode,
+                testTag = mode.testTag(),
+                onClick = { onHistoryViewModeChange(mode) },
+            )
+        }
+    }
+    SettingsHint("Comfortable rows show the commit subject above the author and refs.")
+    SettingsDivider()
+    ToggleRow(
+        label = "Show date and time",
+        hint = "Applies to both compact and comfortable rows.",
+        checked = showHistoryDate,
+        tag = UiTestTags.HISTORY_SHOW_DATE,
+        onCheckedChange = onShowHistoryDateChange,
+    )
+}
+
+@Composable
+private fun SettingsHeader(title: String, description: String) {
+    val colors = LocalGraphColors.current
+    Column(verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS)) {
         Text(
-            text = "Applies to both compact and comfortable rows.",
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.onSurface,
+        )
+        Text(
+            text = description,
             style = MaterialTheme.typography.bodySmall,
             color = colors.onSurfaceMuted,
+        )
+    }
+}
+
+@Composable
+private fun SettingsLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = FontWeight.SemiBold,
+        color = LocalGraphColors.current.onSurface,
+        modifier = Modifier.padding(top = GraphStyle.SPACE_SM),
+    )
+}
+
+@Composable
+private fun SettingsHint(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        color = LocalGraphColors.current.onSurfaceMuted,
+    )
+}
+
+@Composable
+private fun SettingsDivider() {
+    val colors = LocalGraphColors.current
+    Spacer(Modifier.height(GraphStyle.SPACE_XS))
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(GraphStyle.DIVIDER_THICKNESS)
+            .background(colors.divider),
+    )
+    Spacer(Modifier.height(GraphStyle.SPACE_XS))
+}
+
+@Composable
+private fun PreferencesNavItem(
+    label: String,
+    selected: Boolean,
+    tag: String,
+    onClick: () -> Unit,
+) {
+    val colors = LocalGraphColors.current
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(GraphStyle.PREFERENCES_NAV_ITEM_HEIGHT)
+            .clip(RoundedCornerShape(GraphStyle.PREFERENCES_NAV_CORNER_RADIUS))
+            .background(if (selected) colors.selectedRow else colors.surface)
+            .clickable(onClick = onClick)
+            .padding(horizontal = GraphStyle.SPACE_SM)
+            .testTag(tag),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) colors.onSurface else colors.onSurfaceMuted,
         )
     }
 }
@@ -178,17 +304,74 @@ private fun OptionButton(
     val colors = LocalGraphColors.current
     Box(
         modifier = Modifier
-            .clip(RoundedCornerShape(GraphStyle.THEME_OPTION_CORNER_RADIUS))
+            .height(GraphStyle.PREFERENCES_OPTION_HEIGHT)
+            .clip(RoundedCornerShape(GraphStyle.PREFERENCES_NAV_CORNER_RADIUS))
             .background(if (selected) colors.primary else colors.surfaceRaised)
             .clickable(onClick = onClick)
-            .padding(horizontal = GraphStyle.SPACE_XL, vertical = GraphStyle.SPACE_SM)
+            .padding(horizontal = GraphStyle.SPACE_XL)
             .testTag(testTag),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
             style = MaterialTheme.typography.bodySmall,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
             color = if (selected) colors.onPrimary else colors.onSurface,
+        )
+    }
+}
+
+@Composable
+private fun ToggleRow(
+    label: String,
+    hint: String,
+    checked: Boolean,
+    tag: String,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    val colors = LocalGraphColors.current
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(GraphStyle.PREFERENCES_NAV_CORNER_RADIUS))
+            .clickable { onCheckedChange(!checked) }
+            .padding(vertical = GraphStyle.SPACE_XS)
+            .testTag(tag),
+        verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(GraphStyle.PREFERENCES_TOGGLE_SIZE)
+                    .clip(RoundedCornerShape(GraphStyle.PREFERENCES_TOGGLE_CORNER_RADIUS))
+                    .background(if (checked) colors.primary else colors.surfaceRaised)
+                    .border(
+                        GraphStyle.DIVIDER_THICKNESS,
+                        if (checked) colors.primary else colors.divider,
+                        RoundedCornerShape(GraphStyle.PREFERENCES_TOGGLE_CORNER_RADIUS),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (checked) {
+                    Text(
+                        text = "✓",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onPrimary,
+                    )
+                }
+            }
+            Spacer(Modifier.width(GraphStyle.SPACE_SM))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurface,
+            )
+        }
+        Text(
+            text = hint,
+            style = MaterialTheme.typography.bodySmall,
+            color = colors.onSurfaceMuted,
+            modifier = Modifier.padding(start = GraphStyle.PREFERENCES_TOGGLE_SIZE + GraphStyle.SPACE_SM),
         )
     }
 }

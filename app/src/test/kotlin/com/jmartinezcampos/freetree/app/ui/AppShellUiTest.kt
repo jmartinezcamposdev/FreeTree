@@ -87,6 +87,7 @@ class AppShellUiTest {
                 onNodeWithText(
                     "Editing filters will be supported in a future version of FreeTree.",
                 ).assertExists()
+                saveScreenshot("26-filters-info-dialog.png")
                 onNodeWithTag(UiTestTags.FILTERS_INFO_OK).performClick()
                 onNodeWithTag(UiTestTags.FILTERS_INFO_DIALOG).assertDoesNotExist()
 
