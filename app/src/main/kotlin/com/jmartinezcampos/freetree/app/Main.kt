@@ -15,6 +15,7 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.jmartinezcampos.freetree.app.menu.AboutDialog
 import com.jmartinezcampos.freetree.app.menu.AppCommand
 import com.jmartinezcampos.freetree.app.menu.AppMenuBar
 import com.jmartinezcampos.freetree.app.menu.RecentRepositories
@@ -101,12 +102,13 @@ fun main(args: Array<String>) {
                 recentRepositories.record(path)
             }
         }
+        var showAbout by remember { mutableStateOf(false) }
         var showMessages by remember { mutableStateOf(false) }
         var showPreferences by remember { mutableStateOf(false) }
 
         LaunchedEffect(aboutRequested) {
             if (aboutRequested) {
-                dialogController.show(AppDialog.About)
+                showAbout = true
                 aboutRequests.value = false
             }
         }
@@ -206,7 +208,7 @@ fun main(args: Array<String>) {
                     AppCommand.PreviousTab -> activateRelativeTab(-1)
                     AppCommand.Minimize -> window.extendedState =
                         window.extendedState or Frame.ICONIFIED
-                    AppCommand.About -> dialogController.show(AppDialog.About)
+                    AppCommand.About -> showAbout = true
                     AppCommand.MessagesLog -> showMessages = true
                     AppCommand.Preferences -> showPreferences = true
                 }
@@ -226,6 +228,12 @@ fun main(args: Array<String>) {
                 historyViewMode = historyViewMode,
                 showHistoryDate = showHistoryDate,
             )
+            if (showAbout) {
+                AboutDialog(
+                    themeMode = themeMode,
+                    onDismiss = { showAbout = false },
+                )
+            }
         }
         if (showMessages) {
             MessagesWindow(

@@ -26,6 +26,8 @@ data class GraphColors(
     val error: Color,
     val errorContainer: Color,
     val onErrorContainer: Color,
+    val destructive: Color,
+    val onDestructive: Color,
     val lanePalette: List<Color>,
     val nodeBorder: Color,
     val headHalo: Color,
@@ -83,7 +85,12 @@ object GraphStyle {
     val WINDOW_HEIGHT: Dp = 760.dp
     val WINDOW_MIN_WIDTH: Dp = 720.dp
     val WINDOW_MIN_HEIGHT: Dp = 480.dp
+    val ABOUT_DIALOG_WIDTH: Dp = 420.dp
+    val ABOUT_DIALOG_HEIGHT: Dp = 320.dp
     val ABOUT_ICON_SIZE: Dp = 96.dp
+    val ABOUT_CONTENT_MARGIN: Dp = 16.dp
+    val ABOUT_TITLE_SIZE = 20.sp
+    val ABOUT_TITLE_LINE_HEIGHT = 24.sp
     val MESSAGES_WINDOW_WIDTH: Dp = 980.dp
     val MESSAGES_WINDOW_HEIGHT: Dp = 560.dp
     val PREFERENCES_WINDOW_WIDTH: Dp = 680.dp
@@ -146,11 +153,26 @@ object GraphStyle {
     val TOOLBAR_ICON_STROKE: Dp = 1.4.dp
     val TOOLBAR_BRANCH_MAX_WIDTH: Dp = 280.dp
     val CONTEXT_MENU_ITEM_HEIGHT: Dp = 28.dp
-    val DIALOG_WIDTH: Dp = 460.dp
-    val DIALOG_PADDING: Dp = 20.dp
-    val DIALOG_CONTENT_GAP: Dp = 10.dp
-    val DIALOG_BUTTON_HEIGHT: Dp = 30.dp
-    val DIALOG_CORNER_RADIUS: Dp = 12.dp
+    val DIALOG_WIDTH: Dp = 440.dp
+    val DIALOG_HORIZONTAL_PADDING: Dp = 24.dp
+    val DIALOG_VERTICAL_PADDING: Dp = 22.dp
+    val DIALOG_HEADER_BOTTOM_SPACE: Dp = 8.dp
+    val DIALOG_SECTION_GAP: Dp = 14.dp
+    val DIALOG_FIELD_LABEL_GAP: Dp = 6.dp
+    val DIALOG_ACTIONS_TOP_SPACE: Dp = 22.dp
+    val DIALOG_BUTTON_HEIGHT: Dp = 32.dp
+    val DIALOG_BUTTON_MIN_WIDTH: Dp = 80.dp
+    val DIALOG_CORNER_RADIUS: Dp = 10.dp
+    val DIALOG_CONTROL_CORNER_RADIUS: Dp = 6.dp
+    val DIALOG_INPUT_HEIGHT: Dp = 34.dp
+    val DIALOG_WARNING_BAR_WIDTH: Dp = 3.dp
+    val DIALOG_CLOSE_SIZE: Dp = 24.dp
+    val DIALOG_CLOSE_ICON_SIZE: Dp = 10.dp
+    val DIALOG_CLOSE_ICON_STROKE: Dp = 1.5.dp
+    val DIALOG_TITLE_SIZE = 15.sp
+    val DIALOG_TITLE_LINE_HEIGHT = 20.sp
+    val DIALOG_BODY_SIZE = 13.sp
+    val DIALOG_BODY_LINE_HEIGHT = 19.sp
     val DIVIDER_THICKNESS: Dp = 1.dp
     val CONTROL_HEIGHT: Dp = 28.dp
     val CHANGE_SECTION_ACTION_HEIGHT: Dp = 24.dp
@@ -225,9 +247,11 @@ object GraphStyle {
         divider = Color(0xFF333A44),
         selectedRow = Color(0xFF2A3038),
         hoverRow = Color(0xFF252B34),
-        error = Color(0xFFFF8B84),
+        error = Color(0xFFFF6B6B),
         errorContainer = Color(0xFF4A2222),
         onErrorContainer = Color(0xFFFFD5D1),
+        destructive = Color(0xFFE5484D),
+        onDestructive = Color(0xFFFFFFFF),
         lanePalette = listOf(
             Color(0xFF64B5F6),
             Color(0xFF81C784),
@@ -277,9 +301,11 @@ object GraphStyle {
         divider = Color(0xFFD5DAE1),
         selectedRow = Color(0xFFE6EAEF),
         hoverRow = Color(0xFFEEF1F5),
-        error = Color(0xFFB3261E),
+        error = Color(0xFFC92A2A),
         errorContainer = Color(0xFFF9DEDC),
         onErrorContainer = Color(0xFF410E0B),
+        destructive = Color(0xFFD1242F),
+        onDestructive = Color(0xFFFFFFFF),
         lanePalette = listOf(
             Color(0xFF1565C0),
             Color(0xFF2E7D32),

@@ -73,7 +73,6 @@ object UiTestTags {
 
     const val CONTEXT_MENU = "context-menu"
     const val DIALOG_SCRIM = "dialog-scrim"
-    const val ABOUT_DIALOG = "about-dialog"
     const val COMMIT_NAME_DIALOG = "commit-name-dialog"
     const val COMMIT_NAME_INPUT = "commit-name-input"
     const val COMMIT_NAME_ERROR = "commit-name-error"

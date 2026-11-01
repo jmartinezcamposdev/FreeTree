@@ -3,7 +3,6 @@ package com.jmartinezcampos.freetree.app.ui
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
@@ -15,7 +14,7 @@ import kotlin.test.Test
 class FreeTreeDialogsUiTest {
 
     @Test
-    fun aboutAndDiscardAllDialogsUseTheSharedModal() = runDesktopComposeUiTest(
+    fun discardAllDialogUsesTheSharedModal() = runDesktopComposeUiTest(
         width = 1400,
         height = 900,
     ) {
@@ -26,16 +25,6 @@ class FreeTreeDialogsUiTest {
             setContent { App(fixture.manager, dialogController = controller) }
             waitUntil(timeoutMillis = 5_000) {
                 fixture.manager.activeSession.value?.state?.value?.graph != null
-            }
-
-            controller.show(AppDialog.About)
-            waitUntil(timeoutMillis = 5_000) {
-                onAllNodesWithTag(UiTestTags.ABOUT_DIALOG).fetchSemanticsNodes().isNotEmpty()
-            }
-            saveScreenshot("28-about-dialog.png")
-            onNodeWithText("Close").performClick()
-            waitUntil(timeoutMillis = 5_000) {
-                onAllNodesWithTag(UiTestTags.ABOUT_DIALOG).fetchSemanticsNodes().isEmpty()
             }
 
             controller.show(

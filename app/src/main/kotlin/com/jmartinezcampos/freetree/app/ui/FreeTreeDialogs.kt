@@ -1,22 +1,27 @@
 package com.jmartinezcampos.freetree.app.ui
 
-import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
@@ -33,22 +38,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.jmartinezcampos.freetree.app.APP_BUILD_VERSION
-import com.jmartinezcampos.freetree.app.APP_COPYRIGHT
-import com.jmartinezcampos.freetree.app.APP_NAME
-import com.jmartinezcampos.freetree.app.APP_VERSION
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -82,10 +84,6 @@ internal sealed interface AppDialog {
         val destructive: Boolean = false,
         val onConfirm: () -> Unit,
     ) : AppDialog
-
-    data object About : AppDialog {
-        override val tag = UiTestTags.ABOUT_DIALOG
-    }
 }
 
 internal class AppDialogController {
@@ -119,7 +117,7 @@ internal fun FreeTreeDialogHost(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.45f))
+            .background(Color.Black.copy(alpha = 0.50f))
             .testTag(UiTestTags.DIALOG_SCRIM)
             .clickable(
                 interactionSource = interactionSource,
@@ -131,7 +129,7 @@ internal fun FreeTreeDialogHost(
         Column(
             modifier = Modifier
                 .width(GraphStyle.DIALOG_WIDTH)
-                .shadow(18.dp, shape)
+                .shadow(24.dp, shape)
                 .clip(shape)
                 .background(colors.surface)
                 .border(GraphStyle.DIVIDER_THICKNESS, colors.divider, shape)
@@ -150,15 +148,16 @@ internal fun FreeTreeDialogHost(
                         false
                     }
                 }
-                .padding(GraphStyle.DIALOG_PADDING)
+                .padding(
+                    horizontal = GraphStyle.DIALOG_HORIZONTAL_PADDING,
+                    vertical = GraphStyle.DIALOG_VERTICAL_PADDING,
+                )
                 .testTag(dialog.tag),
-            verticalArrangement = Arrangement.spacedBy(GraphStyle.DIALOG_CONTENT_GAP),
         ) {
             when (dialog) {
                 is AppDialog.Info -> InfoContent(dialog, controller)
                 is AppDialog.Prompt -> PromptContent(dialog, controller)
                 is AppDialog.Confirm -> ConfirmContent(dialog, controller)
-                AppDialog.About -> AboutContent(controller)
             }
         }
     }
@@ -167,17 +166,12 @@ internal fun FreeTreeDialogHost(
 @Composable
 private fun InfoContent(dialog: AppDialog.Info, controller: AppDialogController) {
     DialogHeader(title = dialog.title, onDismiss = controller::dismiss)
-    Text(
-        text = dialog.message,
-        style = MaterialTheme.typography.bodyMedium,
-        color = LocalGraphColors.current.onSurface,
-    )
+    Spacer(Modifier.height(GraphStyle.DIALOG_HEADER_BOTTOM_SPACE))
+    DialogMessage(text = dialog.message)
     DialogActions {
         DialogButton(
             label = dialog.confirmLabel,
-            onClick = {
-                controller.dismiss()
-            },
+            onClick = controller::dismiss,
             kind = DialogButtonKind.Primary,
             testTag = if (dialog.tag == UiTestTags.FILTERS_INFO_DIALOG) {
                 UiTestTags.FILTERS_INFO_OK
@@ -190,14 +184,11 @@ private fun InfoContent(dialog: AppDialog.Info, controller: AppDialogController)
 
 @Composable
 private fun ConfirmContent(dialog: AppDialog.Confirm, controller: AppDialogController) {
-    val colors = LocalGraphColors.current
     DialogHeader(title = dialog.title, onDismiss = controller::dismiss)
-    Text(
-        text = dialog.message,
-        style = MaterialTheme.typography.bodyMedium,
-        color = colors.onSurface,
-    )
+    Spacer(Modifier.height(GraphStyle.DIALOG_HEADER_BOTTOM_SPACE))
+    DialogMessage(text = dialog.message)
     dialog.warning?.let { warning ->
+        Spacer(Modifier.height(GraphStyle.DIALOG_SECTION_GAP))
         DialogWarning(warning)
     }
     DialogActions {
@@ -224,7 +215,9 @@ private fun PromptContent(dialog: AppDialog.Prompt, controller: AppDialogControl
     val colors = LocalGraphColors.current
     var value by remember(dialog) { mutableStateOf("") }
     var error by remember(dialog) { mutableStateOf<String?>(null) }
+    var focused by remember(dialog) { mutableStateOf(false) }
     val fieldFocus = remember(dialog) { FocusRequester() }
+    val fieldShape = RoundedCornerShape(GraphStyle.DIALOG_CONTROL_CORNER_RADIUS)
 
     fun submit() {
         val problem = dialog.validate(value)
@@ -239,17 +232,23 @@ private fun PromptContent(dialog: AppDialog.Prompt, controller: AppDialogControl
     LaunchedEffect(dialog) { fieldFocus.requestFocus() }
 
     DialogHeader(title = dialog.title, onDismiss = controller::dismiss)
+    Spacer(Modifier.height(GraphStyle.SPACE_SM))
     Text(
         text = dialog.description,
-        style = MaterialTheme.typography.bodySmall,
+        style = MaterialTheme.typography.bodyMedium.copy(
+            fontSize = GraphStyle.DIALOG_BODY_SIZE,
+            lineHeight = GraphStyle.DIALOG_BODY_LINE_HEIGHT,
+        ),
         color = colors.onSurfaceMuted,
     )
+    Spacer(Modifier.height(GraphStyle.SPACE_XL))
     Text(
         text = dialog.fieldLabel,
-        style = MaterialTheme.typography.bodySmall,
+        style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold,
         color = colors.onSurface,
     )
+    Spacer(Modifier.height(GraphStyle.DIALOG_FIELD_LABEL_GAP))
     BasicTextField(
         value = value,
         onValueChange = {
@@ -257,11 +256,16 @@ private fun PromptContent(dialog: AppDialog.Prompt, controller: AppDialogControl
             error = null
         },
         singleLine = true,
-        textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface),
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            fontSize = GraphStyle.DIALOG_BODY_SIZE,
+            lineHeight = GraphStyle.DIALOG_BODY_LINE_HEIGHT,
+            color = colors.onSurface,
+        ),
         cursorBrush = SolidColor(colors.primary),
         modifier = Modifier
             .fillMaxWidth()
             .focusRequester(fieldFocus)
+            .onFocusChanged { focused = it.isFocused }
             .onPreviewKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
                     submit()
@@ -272,26 +276,31 @@ private fun PromptContent(dialog: AppDialog.Prompt, controller: AppDialogControl
             }
             .testTag(UiTestTags.COMMIT_NAME_INPUT),
         decorationBox = { inner ->
+            val borderColor = when {
+                error != null -> colors.error
+                focused -> colors.primary
+                else -> colors.divider
+            }
             Box(
-                Modifier
+                modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(GraphStyle.TOOLBAR_BUTTON_CORNER_RADIUS))
-                    .background(colors.surfaceRaised)
-                    .border(
-                        GraphStyle.DIVIDER_THICKNESS,
-                        if (error != null) colors.error else colors.divider,
-                        RoundedCornerShape(GraphStyle.TOOLBAR_BUTTON_CORNER_RADIUS),
-                    )
-                    .padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_SM),
+                    .height(GraphStyle.DIALOG_INPUT_HEIGHT)
+                    .clip(fieldShape)
+                    .background(colors.background)
+                    .border(GraphStyle.DIVIDER_THICKNESS, borderColor, fieldShape)
+                    .padding(horizontal = GraphStyle.SPACE_LG),
+                contentAlignment = Alignment.CenterStart,
             ) {
                 inner()
             }
         },
     )
     error?.let {
+        Spacer(Modifier.height(GraphStyle.SPACE_SM))
         Text(
             text = it,
             style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
             color = colors.error,
             modifier = Modifier.testTag(UiTestTags.COMMIT_NAME_ERROR),
         )
@@ -313,86 +322,60 @@ private fun PromptContent(dialog: AppDialog.Prompt, controller: AppDialogControl
 }
 
 @Composable
-private fun AboutContent(controller: AppDialogController) {
-    val colors = LocalGraphColors.current
-    val icon = remember {
-        object {}.javaClass.getResourceAsStream("/FreeTreeIcon.png")?.use(::loadImageBitmap)
-    }
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
-    ) {
-        DialogHeader(title = "About $APP_NAME", onDismiss = controller::dismiss, centered = true)
-        if (icon != null) {
-            Image(
-                bitmap = icon,
-                contentDescription = "$APP_NAME icon",
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(GraphStyle.ABOUT_ICON_SIZE),
-            )
-        }
-        Text(
-            text = "Version $APP_VERSION ($APP_BUILD_VERSION)",
-            style = MaterialTheme.typography.bodyMedium,
-            color = colors.onSurface,
-        )
-        Text(
-            text = "A desktop Git graph client.",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceMuted,
-        )
-        Text(
-            text = APP_COPYRIGHT,
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceMuted,
-        )
-        Text(
-            text = "GPL-2.0-or-later",
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onSurfaceMuted,
-        )
-        DialogActions {
-            DialogButton(
-                label = "Close",
-                onClick = controller::dismiss,
-                kind = DialogButtonKind.Primary,
-            )
-        }
-    }
-}
-
-@Composable
 private fun DialogHeader(
     title: String,
     onDismiss: () -> Unit,
-    centered: Boolean = false,
 ) {
     val colors = LocalGraphColors.current
+    val closeInteraction = remember { MutableInteractionSource() }
+    val closeHovered by closeInteraction.collectIsHoveredAsState()
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = if (centered) Arrangement.Center else Arrangement.spacedBy(GraphStyle.SPACE_SM),
+        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_MD),
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontSize = GraphStyle.DIALOG_TITLE_SIZE,
+                lineHeight = GraphStyle.DIALOG_TITLE_LINE_HEIGHT,
+                fontWeight = FontWeight.SemiBold,
+            ),
             color = colors.onSurface,
-            modifier = if (centered) Modifier else Modifier.weight(GraphStyle.FILL_WEIGHT),
+            modifier = Modifier.weight(GraphStyle.FILL_WEIGHT),
         )
-        if (!centered) {
-            Box(
-                modifier = Modifier
-                    .size(GraphStyle.COMPACT_ACTION_SIZE)
-                    .clip(RoundedCornerShape(GraphStyle.COMPACT_ACTION_CORNER_RADIUS))
-                    .clickable(onClick = onDismiss),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "×",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceMuted,
+        Box(
+            modifier = Modifier
+                .size(GraphStyle.DIALOG_CLOSE_SIZE)
+                .clip(RoundedCornerShape(GraphStyle.DIALOG_CONTROL_CORNER_RADIUS))
+                .background(if (closeHovered) colors.hoverRow else Color.Transparent)
+                .hoverable(closeInteraction)
+                .clickable(
+                    interactionSource = closeInteraction,
+                    indication = null,
+                    onClick = onDismiss,
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(modifier = Modifier.size(GraphStyle.DIALOG_CLOSE_ICON_SIZE)) {
+                val stroke = GraphStyle.DIALOG_CLOSE_ICON_STROKE.toPx()
+                val inset = stroke / 2f
+                val maxX = size.width - inset
+                val maxY = size.height - inset
+                val iconColor = if (closeHovered) colors.onSurface else colors.onSurfaceMuted
+                drawLine(
+                    color = iconColor,
+                    start = Offset(inset, inset),
+                    end = Offset(maxX, maxY),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
+                )
+                drawLine(
+                    color = iconColor,
+                    start = Offset(maxX, inset),
+                    end = Offset(inset, maxY),
+                    strokeWidth = stroke,
+                    cap = StrokeCap.Round,
                 )
             }
         }
@@ -400,29 +383,52 @@ private fun DialogHeader(
 }
 
 @Composable
+private fun DialogMessage(text: String) {
+    val colors = LocalGraphColors.current
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium.copy(
+            fontSize = GraphStyle.DIALOG_BODY_SIZE,
+            lineHeight = GraphStyle.DIALOG_BODY_LINE_HEIGHT,
+        ),
+        color = colors.onSurface,
+    )
+}
+
+@Composable
 private fun DialogWarning(text: String) {
     val colors = LocalGraphColors.current
-    Box(
+    val barShape = RoundedCornerShape(GraphStyle.DIALOG_WARNING_BAR_WIDTH / 2)
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(GraphStyle.TOOLBAR_BUTTON_CORNER_RADIUS))
-            .background(colors.errorContainer)
-            .padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_MD),
+            .height(IntrinsicSize.Min),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_ML),
     ) {
+        Box(
+            modifier = Modifier
+                .width(GraphStyle.DIALOG_WARNING_BAR_WIDTH)
+                .fillMaxHeight()
+                .clip(barShape)
+                .background(colors.destructive),
+        )
         Text(
             text = text,
-            style = MaterialTheme.typography.bodySmall,
-            color = colors.onErrorContainer,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.error,
+            modifier = Modifier.padding(vertical = GraphStyle.SPACE_XXS),
         )
     }
 }
 
 @Composable
 private fun DialogActions(content: @Composable () -> Unit) {
-    Spacer(Modifier.height(GraphStyle.SPACE_XS))
+    Spacer(Modifier.height(GraphStyle.DIALOG_ACTIONS_TOP_SPACE))
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM, Alignment.End),
+        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_MD, Alignment.End),
         verticalAlignment = Alignment.CenterVertically,
         content = { content() },
     )
@@ -438,30 +444,52 @@ private fun DialogButton(
     testTag: String? = null,
 ) {
     val colors = LocalGraphColors.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val shape = RoundedCornerShape(GraphStyle.DIALOG_CONTROL_CORNER_RADIUS)
+
     val background = when (kind) {
-        DialogButtonKind.Primary -> colors.primary
-        DialogButtonKind.Secondary -> colors.surfaceRaised
-        DialogButtonKind.Destructive -> colors.errorContainer
+        DialogButtonKind.Primary -> if (hovered) colors.primary.copy(alpha = 0.90f) else colors.primary
+        DialogButtonKind.Secondary -> if (hovered) colors.hoverRow else colors.surface
+        DialogButtonKind.Destructive -> if (hovered) colors.destructive.copy(alpha = 0.90f) else colors.destructive
     }
     val foreground = when (kind) {
         DialogButtonKind.Primary -> colors.onPrimary
         DialogButtonKind.Secondary -> colors.onSurface
-        DialogButtonKind.Destructive -> colors.onErrorContainer
+        DialogButtonKind.Destructive -> colors.onDestructive
     }
+    val fontWeight = when (kind) {
+        DialogButtonKind.Primary, DialogButtonKind.Destructive -> FontWeight.SemiBold
+        DialogButtonKind.Secondary -> FontWeight.Medium
+    }
+
     Box(
         modifier = Modifier
             .height(GraphStyle.DIALOG_BUTTON_HEIGHT)
-            .clip(RoundedCornerShape(GraphStyle.TOOLBAR_BUTTON_CORNER_RADIUS))
+            .widthIn(min = GraphStyle.DIALOG_BUTTON_MIN_WIDTH)
+            .clip(shape)
             .background(background)
-            .clickable(onClick = onClick)
+            .then(
+                if (kind == DialogButtonKind.Secondary) {
+                    Modifier.border(GraphStyle.DIVIDER_THICKNESS, colors.divider, shape)
+                } else {
+                    Modifier
+                },
+            )
+            .hoverable(interactionSource)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
             .padding(horizontal = GraphStyle.SPACE_XL)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         Text(
             text = label,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = fontWeight,
             color = foreground,
         )
     }
@@ -483,4 +511,3 @@ private fun cancelTag(tag: String): String? = when (tag) {
     UiTestTags.DISCARD_ALL_DIALOG -> UiTestTags.DISCARD_ALL_CANCEL
     else -> null
 }
-
