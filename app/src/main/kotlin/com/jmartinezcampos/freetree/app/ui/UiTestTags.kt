@@ -21,6 +21,8 @@ object UiTestTags {
     const val FILTERS_ICON = "toolbar-filters-icon"
     const val FILTERS_BRANCH_COUNT = "toolbar-filters-branches"
     const val FILTERS_OTHER_COUNT = "toolbar-filters-other"
+    const val FILTERS_INFO_DIALOG = "filters-info-dialog"
+    const val FILTERS_INFO_OK = "filters-info-ok"
     const val BUSY_INDICATOR = "toolbar-busy"
 
     const val QUERY_INPUT = "query-input"

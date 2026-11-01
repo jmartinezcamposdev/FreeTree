@@ -82,6 +82,14 @@ class AppShellUiTest {
                 onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertDoesNotExist()
                 onNodeWithText("↑1 ↓2").assertExists()
 
+                onNodeWithTag(UiTestTags.FILTERS_BUTTON).performClick()
+                onNodeWithTag(UiTestTags.FILTERS_INFO_DIALOG).assertExists()
+                onNodeWithText(
+                    "Editing filters will be supported in a future version of FreeTree.",
+                ).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_INFO_OK).performClick()
+                onNodeWithTag(UiTestTags.FILTERS_INFO_DIALOG).assertDoesNotExist()
+
                 fixture.backend.clearCalls()
                 onNodeWithTag(UiTestTags.PULL).performClick()
                 waitUntil(timeoutMillis = 5_000) { fixture.backend.callCount(FakeMethod.PULL) == 1 }

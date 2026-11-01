@@ -342,6 +342,9 @@ class RepoSessionTest {
         val commits = RandomDag.generate(seed = 42, commitCount = 10)
         val target = DiffTarget.Unstaged("a.txt")
         val backend = backend(commits)
+        backend.status = backend.status.copy(
+            entries = listOf(StatusEntry("a.txt", null, ' ', 'M', StatusKind.ORDINARY)),
+        )
         backend.diffs = mapOf(target to DiffText(emptyList(), binary = false, truncated = false))
         val session = session(backend, FakeWatcher())
         session.activate()

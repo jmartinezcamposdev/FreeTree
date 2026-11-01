@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -235,6 +236,7 @@ internal fun Toolbar(
         ?: status?.branchHead?.let(::abbreviateHash)
         ?: "detached HEAD"
     val counts = filterCounts(state)
+    var showFiltersInfo by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -347,9 +349,31 @@ internal fun Toolbar(
                 iconTag = UiTestTags.FILTERS_ICON,
                 icon = { color, stroke -> drawFiltersIcon(color, stroke) },
                 enabled = session != null,
-                onClick = {},
+                onClick = { showFiltersInfo = true },
             )
         }
+    }
+
+    if (showFiltersInfo) {
+        AlertDialog(
+            onDismissRequest = { showFiltersInfo = false },
+            modifier = Modifier.testTag(UiTestTags.FILTERS_INFO_DIALOG),
+            title = { Text("Filters") },
+            text = {
+                Text(
+                    "Editing filters will be supported in a future version of FreeTree.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showFiltersInfo = false },
+                    modifier = Modifier.testTag(UiTestTags.FILTERS_INFO_OK),
+                ) {
+                    Text("OK")
+                }
+            },
+        )
     }
 }
 
