@@ -335,7 +335,7 @@ private fun ToggleRow(
             .fillMaxWidth()
             .clip(RoundedCornerShape(GraphStyle.PREFERENCES_NAV_CORNER_RADIUS))
             .clickable { onCheckedChange(!checked) }
-            .padding(vertical = GraphStyle.SPACE_XS)
+            .padding(horizontal = GraphStyle.SPACE_MD, vertical = GraphStyle.SPACE_MD)
             .testTag(tag),
         verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
     ) {
