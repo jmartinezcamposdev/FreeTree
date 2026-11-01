@@ -10,10 +10,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,13 +24,19 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,8 +49,10 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -49,7 +60,10 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +98,14 @@ internal sealed interface AppDialog {
         val destructive: Boolean = false,
         val onConfirm: () -> Unit,
     ) : AppDialog
+
+    data class BranchPicker(
+        val entries: List<BranchPickerEntry>,
+        val busy: Boolean,
+        val onSelect: (BranchPickerEntry) -> Unit,
+    ) : AppDialog {
+        override val tag: String = UiTestTags.BRANCH_PICKER_DIALOG
+    }
 }
 
 internal class AppDialogController {
@@ -114,7 +136,7 @@ internal fun FreeTreeDialogHost(
         focusRequester.requestFocus()
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.50f))
@@ -126,9 +148,27 @@ internal fun FreeTreeDialogHost(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        val isBranchPicker = dialog is AppDialog.BranchPicker
+        val dialogWidth = if (isBranchPicker) {
+            minOf(
+                GraphStyle.BRANCH_PICKER_WIDTH,
+                maxWidth * GraphStyle.BRANCH_PICKER_WIDTH_FRACTION,
+            )
+        } else {
+            GraphStyle.DIALOG_WIDTH
+        }
+        val dialogHeight = if (isBranchPicker) {
+            minOf(
+                GraphStyle.BRANCH_PICKER_MAX_HEIGHT,
+                maxHeight * GraphStyle.BRANCH_PICKER_HEIGHT_FRACTION,
+            )
+        } else {
+            null
+        }
         Column(
             modifier = Modifier
-                .width(GraphStyle.DIALOG_WIDTH)
+                .width(dialogWidth)
+                .then(if (dialogHeight != null) Modifier.height(dialogHeight) else Modifier)
                 .shadow(24.dp, shape)
                 .clip(shape)
                 .background(colors.surface)
@@ -158,6 +198,7 @@ internal fun FreeTreeDialogHost(
                 is AppDialog.Info -> InfoContent(dialog, controller)
                 is AppDialog.Prompt -> PromptContent(dialog, controller)
                 is AppDialog.Confirm -> ConfirmContent(dialog, controller)
+                is AppDialog.BranchPicker -> BranchPickerContent(dialog, controller)
             }
         }
     }
@@ -208,6 +249,308 @@ private fun ConfirmContent(dialog: AppDialog.Confirm, controller: AppDialogContr
             testTag = confirmTag(dialog.tag),
         )
     }
+}
+
+@Composable
+private fun ColumnScope.BranchPickerContent(
+    dialog: AppDialog.BranchPicker,
+    controller: AppDialogController,
+) {
+    val colors = LocalGraphColors.current
+    var query by remember(dialog) { mutableStateOf("") }
+    var highlighted by remember(dialog) { mutableStateOf(0) }
+    val entries = remember(dialog.entries, query) {
+        filterBranchPickerEntries(dialog.entries, query)
+    }
+    val local = entries.filterNot { it.isRemote }
+    val remote = entries.filter { it.isRemote }
+    val highlightedEntry = entries.getOrNull(highlighted)
+    val searchFocus = remember(dialog) { FocusRequester() }
+
+    fun select(entry: BranchPickerEntry) {
+        if (dialog.busy) return
+        dialog.onSelect(entry)
+        controller.dismiss()
+    }
+
+    LaunchedEffect(dialog) {
+        searchFocus.requestFocus()
+    }
+    LaunchedEffect(query) {
+        highlighted = 0
+    }
+
+    DialogHeader(title = "Switch branch", onDismiss = controller::dismiss)
+    Spacer(Modifier.height(GraphStyle.SPACE_SM))
+    BasicTextField(
+        value = query,
+        onValueChange = { query = it },
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodyMedium.copy(
+            fontSize = GraphStyle.DIALOG_BODY_SIZE,
+            lineHeight = GraphStyle.DIALOG_BODY_LINE_HEIGHT,
+            color = colors.onSurface,
+        ),
+        cursorBrush = SolidColor(colors.primary),
+        modifier = Modifier
+            .fillMaxWidth()
+            .focusRequester(searchFocus)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionDown -> {
+                        if (entries.isNotEmpty()) {
+                            highlighted = (highlighted + 1).coerceAtMost(entries.lastIndex)
+                        }
+                        true
+                    }
+                    Key.DirectionUp -> {
+                        if (entries.isNotEmpty()) {
+                            highlighted = (highlighted - 1).coerceAtLeast(0)
+                        }
+                        true
+                    }
+                    Key.Enter -> {
+                        entries.getOrNull(highlighted)?.let(::select)
+                        true
+                    }
+                    Key.Escape -> {
+                        controller.dismiss()
+                        true
+                    }
+                    else -> false
+                }
+            }
+            .testTag(UiTestTags.BRANCH_PICKER_SEARCH),
+        decorationBox = { inner ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(GraphStyle.DIALOG_CONTROL_CORNER_RADIUS))
+                    .background(colors.surfaceRaised)
+                    .border(
+                        GraphStyle.DIVIDER_THICKNESS,
+                        colors.divider,
+                        RoundedCornerShape(GraphStyle.DIALOG_CONTROL_CORNER_RADIUS),
+                    )
+                    .padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_MD),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(GraphStyle.FILL_WEIGHT)) {
+                    if (query.isEmpty()) {
+                        Text(
+                            text = "Search branches…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onSurfaceMuted,
+                        )
+                    }
+                    inner()
+                }
+                if (query.isNotEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .size(GraphStyle.COMPACT_ACTION_SIZE)
+                            .clip(RoundedCornerShape(GraphStyle.COMPACT_ACTION_CORNER_RADIUS))
+                            .clickable { query = "" },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = "×",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onSurfaceMuted,
+                        )
+                    }
+                }
+            }
+        },
+    )
+    Spacer(Modifier.height(GraphStyle.SPACE_MD))
+
+    if (entries.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .weight(GraphStyle.FILL_WEIGHT)
+                .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = "No matching branches",
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurfaceMuted,
+                modifier = Modifier.testTag(UiTestTags.BRANCH_PICKER_EMPTY),
+            )
+        }
+        return
+    }
+
+    val listState = rememberLazyListState()
+    val hasOverflow by remember(listState) {
+        derivedStateOf {
+            val info = listState.layoutInfo
+            if (info.totalItemsCount == 0) {
+                false
+            } else {
+                val first = info.visibleItemsInfo.firstOrNull()?.index ?: 0
+                val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+                first > 0 || last < info.totalItemsCount - 1
+            }
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .weight(GraphStyle.FILL_WEIGHT)
+            .fillMaxWidth(),
+    ) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(end = GraphStyle.SCROLLBAR_GUTTER + GraphStyle.SPACE_MD),
+            verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XXS),
+        ) {
+            if (local.isNotEmpty()) {
+                item(key = "local-header") {
+                    BranchPickerSectionHeader("Local branches")
+                }
+                items(local, key = { it.key }) { entry ->
+                    BranchPickerRow(
+                        entry = entry,
+                        highlighted = entry == highlightedEntry,
+                        busy = dialog.busy,
+                        onClick = { select(entry) },
+                    )
+                }
+            }
+            if (remote.isNotEmpty()) {
+                item(key = "remote-header") {
+                    BranchPickerSectionHeader("Remote branches")
+                }
+                items(remote, key = { it.key }) { entry ->
+                    BranchPickerRow(
+                        entry = entry,
+                        highlighted = entry == highlightedEntry,
+                        busy = dialog.busy,
+                        onClick = { select(entry) },
+                    )
+                }
+            }
+        }
+        if (hasOverflow) {
+            ModernScrollbar(
+                listState = listState,
+                modifier = Modifier.align(Alignment.CenterEnd),
+                alwaysVisible = false,
+                testTag = UiTestTags.BRANCH_PICKER_SCROLLBAR,
+            )
+        }
+    }
+}
+
+@Composable
+private fun BranchPickerSectionHeader(title: String) {
+    val colors = LocalGraphColors.current
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = colors.onSurfaceMuted,
+        modifier = Modifier.padding(
+            start = GraphStyle.SPACE_SM,
+            top = GraphStyle.SPACE_SM,
+            bottom = GraphStyle.SPACE_XS,
+        ),
+    )
+}
+
+@Composable
+private fun BranchPickerRow(
+    entry: BranchPickerEntry,
+    highlighted: Boolean,
+    busy: Boolean,
+    onClick: () -> Unit,
+) {
+    val colors = LocalGraphColors.current
+    val interactionSource = remember(entry) { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    val enabled = !busy
+    val background = when {
+        entry.isCurrent -> colors.selectedRow
+        highlighted -> colors.primary.copy(alpha = 0.12f)
+        hovered && enabled -> colors.hoverRow
+        else -> Color.Transparent
+    }
+    val foreground = if (entry.isCurrent) colors.primary else colors.onSurface
+    val iconColor = when {
+        entry.isRemote -> colors.chipRemoteForeground
+        entry.isCurrent -> colors.primary
+        else -> colors.onSurfaceMuted
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(GraphStyle.BRANCH_PICKER_ROW_HEIGHT)
+            .clip(RoundedCornerShape(GraphStyle.PREFERENCES_NAV_CORNER_RADIUS))
+            .background(background)
+            .hoverable(interactionSource)
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = onClick,
+            )
+            .semantics { selected = entry.isCurrent }
+            .padding(horizontal = GraphStyle.SPACE_XL)
+            .testTag(UiTestTags.branchPickerItem(entry.displayName)),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_MD),
+    ) {
+        Canvas(modifier = Modifier.size(GraphStyle.BRANCH_PICKER_ICON_SIZE)) {
+            val stroke = GraphStyle.TOOLBAR_ICON_STROKE.toPx()
+            if (entry.isRemote) {
+                drawRemoteBranchIcon(iconColor, stroke)
+            } else {
+                drawBranchIcon(iconColor, stroke)
+            }
+        }
+        Text(
+            text = entry.displayName,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (entry.isCurrent) FontWeight.Bold else FontWeight.Normal,
+            color = foreground,
+            maxLines = GraphStyle.MAX_TEXT_LINES,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(GraphStyle.FILL_WEIGHT),
+        )
+        if (entry.isCurrent) {
+            Text(
+                text = "current",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onSurfaceMuted,
+            )
+        }
+    }
+}
+
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawRemoteBranchIcon(
+    color: Color,
+    stroke: Float,
+) {
+    val radius = size.minDimension * 0.38f
+    val center = Offset(size.width / 2f, size.height / 2f)
+    drawCircle(color, radius, center, style = Stroke(stroke))
+    drawOval(
+        color = color,
+        topLeft = Offset(center.x - radius * 0.45f, center.y - radius),
+        size = Size(radius * 0.9f, radius * 2f),
+        style = Stroke(stroke),
+    )
+    drawLine(
+        color,
+        Offset(center.x - radius, center.y),
+        Offset(center.x + radius, center.y),
+        stroke,
+    )
 }
 
 @Composable

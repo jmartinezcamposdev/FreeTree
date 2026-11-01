@@ -23,6 +23,10 @@ object UiTestTags {
     const val FILTERS_OTHER_COUNT = "toolbar-filters-other"
     const val FILTERS_INFO_DIALOG = "filters-info-dialog"
     const val FILTERS_INFO_OK = "filters-info-ok"
+    const val BRANCH_PICKER_DIALOG = "branch-picker-dialog"
+    const val BRANCH_PICKER_SEARCH = "branch-picker-search"
+    const val BRANCH_PICKER_EMPTY = "branch-picker-empty"
+    const val BRANCH_PICKER_SCROLLBAR = "branch-picker-scrollbar"
     const val BUSY_INDICATOR = "toolbar-busy"
 
     const val QUERY_INPUT = "query-input"
@@ -61,6 +65,7 @@ object UiTestTags {
     const val CONFLICTS_SECTION = "changes-conflicts"
     const val STAGED_SECTION = "changes-staged"
     const val UNSTAGED_SECTION = "changes-unstaged"
+    const val DISCARD_ALL_CHANGES = "changes-discard-all"
     const val STAGE_ALL = "changes-stage-all"
     const val UNSTAGE_ALL = "changes-unstage-all"
     const val COMMIT_MESSAGE = "changes-commit-message"
@@ -83,6 +88,7 @@ object UiTestTags {
     const val DELETE_BRANCH_CANCEL = "delete-branch-cancel"
 
     fun contextMenuItem(label: String) = "context-menu-item-$label"
+    fun branchPickerItem(name: String) = "branch-picker-item-$name"
 
     const val DISCARD_DIALOG = "discard-dialog"
     const val DISCARD_CONFIRM = "discard-confirm"

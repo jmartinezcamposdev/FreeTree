@@ -168,6 +168,12 @@ object GraphStyle {
     val DIALOG_WARNING_BAR_WIDTH: Dp = 3.dp
     val DIALOG_CLOSE_SIZE: Dp = 24.dp
     val DIALOG_CLOSE_ICON_SIZE: Dp = 10.dp
+    val BRANCH_PICKER_WIDTH: Dp = 680.dp
+    val BRANCH_PICKER_MAX_HEIGHT: Dp = 720.dp
+    const val BRANCH_PICKER_WIDTH_FRACTION: Float = 0.72f
+    const val BRANCH_PICKER_HEIGHT_FRACTION: Float = 0.86f
+    val BRANCH_PICKER_ROW_HEIGHT: Dp = 36.dp
+    val BRANCH_PICKER_ICON_SIZE: Dp = 14.dp
     val DIALOG_CLOSE_ICON_STROKE: Dp = 1.5.dp
     val DIALOG_TITLE_SIZE = 15.sp
     val DIALOG_TITLE_LINE_HEIGHT = 20.sp

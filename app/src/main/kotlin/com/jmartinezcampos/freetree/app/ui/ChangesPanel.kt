@@ -51,6 +51,7 @@ internal fun ChangesPanel(
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
     settingsController: AppSettingsController,
     onDiscardRequest: (StatusEntry) -> Unit,
+    onDiscardAllRequest: (List<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
@@ -323,18 +324,40 @@ private fun ChangesFileList(
                     count = unstaged.size,
                     tag = UiTestTags.UNSTAGED_SECTION,
                     action = {
-                        TextButton(
-                            onClick = { session?.stage(unstaged.map { it.path }) },
-                            enabled = !busy,
-                            contentPadding = PaddingValues(
-                                horizontal = GraphStyle.SPACE_SM,
-                                vertical = 0.dp,
-                            ),
-                            modifier = Modifier
-                                .height(GraphStyle.CHANGE_SECTION_ACTION_HEIGHT)
-                                .testTag(UiTestTags.STAGE_ALL),
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("Stage all", style = MaterialTheme.typography.bodySmall)
+                            TextButton(
+                                onClick = { onDiscardAllRequest(unstaged.map { it.path }) },
+                                enabled = !busy,
+                                contentPadding = PaddingValues(
+                                    horizontal = GraphStyle.SPACE_SM,
+                                    vertical = 0.dp,
+                                ),
+                                modifier = Modifier
+                                    .height(GraphStyle.CHANGE_SECTION_ACTION_HEIGHT)
+                                    .testTag(UiTestTags.DISCARD_ALL_CHANGES),
+                            ) {
+                                Text(
+                                    text = "Discard all",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.error,
+                                )
+                            }
+                            TextButton(
+                                onClick = { session?.stage(unstaged.map { it.path }) },
+                                enabled = !busy,
+                                contentPadding = PaddingValues(
+                                    horizontal = GraphStyle.SPACE_SM,
+                                    vertical = 0.dp,
+                                ),
+                                modifier = Modifier
+                                    .height(GraphStyle.CHANGE_SECTION_ACTION_HEIGHT)
+                                    .testTag(UiTestTags.STAGE_ALL),
+                            ) {
+                                Text("Stage all", style = MaterialTheme.typography.bodySmall)
+                            }
                         }
                     },
                 )

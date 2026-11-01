@@ -227,6 +227,7 @@ private fun NewTabButton(onOpen: () -> Unit) {
 internal fun Toolbar(
     state: RepoUiState,
     session: RepoSession?,
+    onBranchClick: () -> Unit,
     onFiltersClick: () -> Unit,
 ) {
     val colors = LocalGraphColors.current
@@ -315,7 +316,7 @@ internal fun Toolbar(
             iconTag = UiTestTags.BRANCH_ICON,
             icon = { color, stroke -> drawBranchIcon(color, stroke) },
             enabled = session != null,
-            onClick = {},
+            onClick = onBranchClick,
             textTag = UiTestTags.BRANCH_LABEL,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier
@@ -525,7 +526,7 @@ private fun DrawScope.drawPushIcon(
     )
 }
 
-private fun DrawScope.drawBranchIcon(
+internal fun DrawScope.drawBranchIcon(
     color: Color,
     stroke: Float,
 ) {

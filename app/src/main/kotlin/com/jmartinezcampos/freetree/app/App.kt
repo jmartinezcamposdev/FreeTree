@@ -52,6 +52,7 @@ import com.jmartinezcampos.freetree.app.ui.ChangesPanel
 import com.jmartinezcampos.freetree.app.ui.CommitMenuAction
 import com.jmartinezcampos.freetree.app.ui.CommitPanel
 import com.jmartinezcampos.freetree.app.ui.FreeTreeDialogHost
+import com.jmartinezcampos.freetree.app.ui.buildBranchPickerEntries
 import com.jmartinezcampos.freetree.app.ui.GraphList
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
 import com.jmartinezcampos.freetree.app.ui.HistoryViewMode
@@ -290,6 +291,28 @@ private fun AppContent(
         Toolbar(
             state = state,
             session = session,
+            onBranchClick = {
+                session?.let { active ->
+                    dialogController.show(
+                        AppDialog.BranchPicker(
+                            entries = buildBranchPickerEntries(
+                                refs = state.refs,
+                                currentBranch = state.head?.branchShortName,
+                            ),
+                            busy = state.busy != null,
+                            onSelect = { entry ->
+                                if (entry.isRemote) {
+                                    entry.remoteRef?.let { remote ->
+                                        active.checkoutRemoteAsLocal(entry.localName, remote)
+                                    }
+                                } else if (!entry.isCurrent) {
+                                    active.checkoutLocal(entry.localName)
+                                }
+                            },
+                        ),
+                    )
+                }
+            },
             onFiltersClick = {
                 dialogController.show(
                     AppDialog.Info(
@@ -373,6 +396,22 @@ private fun AppContent(
                                 ),
                             )
                         },
+                        onDiscardAllRequest = { paths ->
+                            if (paths.isNotEmpty()) {
+                                dialogController.show(
+                                    AppDialog.Confirm(
+                                        tag = UiTestTags.DISCARD_ALL_DIALOG,
+                                        title = "Discard all unstaged changes?",
+                                        message = "Discard unstaged changes in ${paths.size} file(s)?",
+                                        warning = "Tracked files will be restored from the index. Untracked " +
+                                            "files will be deleted from disk.",
+                                        confirmLabel = "Discard all",
+                                        destructive = true,
+                                        onConfirm = { session.discardUnstaged(paths) },
+                                    ),
+                                )
+                            }
+                        },
                         modifier = Modifier.weight(1f - graphFraction),
                     )
                 }
@@ -397,6 +436,7 @@ private fun DetailPane(
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
     settingsController: AppSettingsController,
     onDiscardRequest: (StatusEntry) -> Unit,
+    onDiscardAllRequest: (List<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     when (val selection = state.selection) {
@@ -413,6 +453,7 @@ private fun DetailPane(
             loadFullDiff = loadFullDiff,
             settingsController = settingsController,
             onDiscardRequest = onDiscardRequest,
+            onDiscardAllRequest = onDiscardAllRequest,
             modifier = modifier,
         )
     }
