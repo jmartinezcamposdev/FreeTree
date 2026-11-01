@@ -108,6 +108,7 @@ internal fun ChangesPanel(
                         scrollState = changesScrollState,
                         busy = busy,
                         onPendingDiscard = onDiscardRequest,
+                        onDiscardAllRequest = onDiscardAllRequest,
                         modifier = Modifier.weight(filesFraction),
                     )
                     HorizontalSplitter(
@@ -143,6 +144,7 @@ internal fun ChangesPanel(
                     scrollState = changesScrollState,
                     busy = busy,
                     onPendingDiscard = onDiscardRequest,
+                    onDiscardAllRequest = onDiscardAllRequest,
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -220,6 +222,7 @@ private fun ChangesFileList(
     scrollState: androidx.compose.foundation.ScrollState,
     busy: Boolean,
     onPendingDiscard: (StatusEntry) -> Unit,
+    onDiscardAllRequest: (List<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current

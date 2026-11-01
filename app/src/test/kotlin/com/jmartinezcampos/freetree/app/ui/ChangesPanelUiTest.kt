@@ -191,6 +191,48 @@ class ChangesPanelUiTest {
         }
 
     @Test
+    fun discardAllHeaderActionConfirmsAndDiscardsEveryUnstagedPath() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val fixture = fixture(
+                WorkingStatus(
+                    commits[1].hash,
+                    null,
+                    0,
+                    0,
+                    false,
+                    listOf(
+                        StatusEntry("src/Staged.kt", null, 'M', ' ', StatusKind.ORDINARY),
+                        StatusEntry("README.md", null, ' ', 'M', StatusKind.ORDINARY),
+                        StatusEntry("notes.txt", null, '?', '?', StatusKind.UNTRACKED),
+                    ),
+                ),
+            )
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.status != null
+                }
+
+                onNodeWithTag(UiTestTags.DISCARD_ALL_CHANGES).performClick()
+                onNodeWithTag(UiTestTags.DISCARD_ALL_DIALOG).assertExists()
+                onNodeWithText("Discard unstaged changes in 2 file(s)?", substring = true).assertExists()
+                saveScreenshot("31-discard-all-changes-dialog.png")
+                assertEquals(0, fixture.backend.callCount(FakeMethod.DISCARD_UNSTAGED))
+
+                onNodeWithTag(UiTestTags.DISCARD_ALL_CONFIRM).performClick()
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.backend.callCount(FakeMethod.DISCARD_UNSTAGED) == 1
+                }
+                assertEquals(
+                    listOf("README.md", "notes.txt"),
+                    fixture.backend.callsOf(FakeMethod.DISCARD_UNSTAGED).single().paths,
+                )
+            } finally {
+                fixture.close()
+            }
+        }
+
+    @Test
     fun porcelainDotStatusesDoNotMoveFilesIntoTheWrongSection() =
         runDesktopComposeUiTest(width = 1400, height = 900) {
             val fixture = fixture(
