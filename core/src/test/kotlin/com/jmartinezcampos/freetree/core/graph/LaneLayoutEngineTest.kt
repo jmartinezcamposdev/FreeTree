@@ -245,10 +245,10 @@ class LaneLayoutEngineTest {
     }
 
     @Test
-    fun workingTreeLaneRunsFromTheTopToHeadWithoutDisturbingHeadAtRowZero() {
+    fun headBranchLaneStartsAtTheMergeChildAndEndsAtHead() {
         val commits = listOf(
-            commit("x", "a"),
-            commit("a", "head"),
+            commit("merge-child", "main-parent", "head"),
+            commit("main-parent"),
             commit("head", "root"),
             commit("root"),
         )
@@ -257,27 +257,26 @@ class LaneLayoutEngineTest {
         val snapshot = engine.snapshot(complete = true)
 
         assertEquals(0, snapshot.workingTreeLane)
-        assertEquals(0, snapshot.nodeLane(2))
+        assertEquals(1, snapshot.nodeLane(2))
         assertEquals(
             listOf(
-                GraphSegment(0, 0, 0, SegKind.PASS, false),
-                GraphSegment(1, 1, 1, SegKind.OUT, false),
+                GraphSegment(2, 2, 1, SegKind.OUT, false),
+                GraphSegment(2, 1, 1, SegKind.OUT, true),
             ),
             snapshot.segments(0).toList(),
         )
         assertEquals(
             listOf(
-                GraphSegment(0, 0, 0, SegKind.PASS, false),
-                GraphSegment(1, 1, 1, SegKind.IN, false),
-                GraphSegment(1, 1, 1, SegKind.OUT, false),
+                GraphSegment(1, 1, 1, SegKind.PASS, false),
+                GraphSegment(2, 2, 1, SegKind.IN, false),
             ),
             snapshot.segments(1).toList(),
         )
         assertEquals(
             listOf(
-                GraphSegment(0, 0, 0, SegKind.IN, false),
-                GraphSegment(1, 0, 1, SegKind.IN, false),
-                GraphSegment(0, 0, 0, SegKind.OUT, false),
+                GraphSegment(1, 1, 1, SegKind.IN, false),
+                GraphSegment(0, 1, 0, SegKind.IN, false),
+                GraphSegment(1, 1, 1, SegKind.OUT, false),
             ),
             snapshot.segments(2).toList(),
         )
@@ -302,10 +301,7 @@ class LaneLayoutEngineTest {
         assertEquals(0, snapshot.nodeLane(0))
         assertEquals(1, snapshot.maxLanes)
         assertEquals(
-            listOf(
-                GraphSegment(0, 0, 0, SegKind.IN, false),
-                GraphSegment(0, 0, 0, SegKind.OUT, false),
-            ),
+            listOf(GraphSegment(0, 0, 0, SegKind.OUT, false)),
             snapshot.segments(0).toList(),
         )
         assertEquals(

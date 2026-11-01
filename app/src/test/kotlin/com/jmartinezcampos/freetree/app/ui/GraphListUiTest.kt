@@ -10,6 +10,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
 import com.jmartinezcampos.freetree.app.smoke.saveScreenshot
+import com.jmartinezcampos.freetree.app.menu.stagedPaths
+import com.jmartinezcampos.freetree.core.graph.SegKind
 import com.jmartinezcampos.freetree.core.model.GitRef
 import com.jmartinezcampos.freetree.core.model.HeadInfo
 import com.jmartinezcampos.freetree.core.model.RefKind
@@ -125,6 +127,38 @@ class GraphListUiTest {
                 assertTrue(graph.indexOfHash(head) > 0)
                 assertEquals(0, graph.workingTreeLane)
                 saveScreenshot("24-working-tree-head-link.png")
+            } finally {
+                fixture.close()
+            }
+        }
+
+    @Test
+    fun workingTreeHeadAtFirstRowKeepsTheHeadParentLane() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val commits = RandomDag.generate(seed = 25, commitCount = 10)
+            val head = commits[0].hash
+            val fixture = uiFixture(
+                commits = commits,
+                refs = listOf(
+                    GitRef("refs/heads/main", "main", RefKind.LOCAL_BRANCH, head, true, null),
+                ),
+                head = HeadInfo(head, "main"),
+            )
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.graph?.complete == true
+                }
+                val graph = fixture.manager.activeSession.value!!.state.value.graph!!
+                assertEquals(0, graph.workingTreeLane)
+                val segments = graph.segments(0)
+                assertTrue(
+                    (0 until segments.size).any { index ->
+                        val segment = segments[index]
+                        segment.kind == SegKind.OUT && segment.from == graph.nodeLane(0)
+                    },
+                )
+                saveScreenshot("25-head-first-working-tree.png")
             } finally {
                 fixture.close()
             }

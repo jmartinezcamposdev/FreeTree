@@ -22,10 +22,12 @@ class LaneLayoutEngine(
     private var maxLanes = 0
     private var workingTreeLane: Int? = null
     private var workingTreeMerged = false
+    private var headBranchLane: Int? = null
+    private var headBranchHasChild = false
 
     init {
         if (workingTreeHashValue != null) {
-            lanes += Lane(workingTreeHashValue, nextColor())
+            lanes += Lane(workingTreeHashValue, nextColor(), hidden = true)
             workingTreeLane = 0
         }
     }
@@ -59,16 +61,40 @@ class LaneLayoutEngine(
     }
 
     private fun addGraph(c: RawCommit) {
-        val incoming = lanes.indices.filter { lanes[it]?.awaits == c.hash }
-        if (workingTreeLane != null && workingTreeLane in incoming) {
-            workingTreeMerged = true
+        if (workingTreeHashValue != null &&
+            rowCount == 0 &&
+            headBranchLane == null &&
+            c.hash != workingTreeHashValue
+        ) {
+            val workingColor = lanes[0]?.color ?: 0
+            lanes.add(1, Lane(workingTreeHashValue, workingColor, hidden = true))
+            headBranchLane = 1
+        }
+
+        val isHeadRow = workingTreeHashValue != null && c.hash == workingTreeHashValue
+        val separateHeadLane = isHeadRow && headBranchLane != null
+        if (isHeadRow && headBranchHasChild) {
+            val headLane = headBranchLane ?: 0
+            lanes[headLane] = lanes[headLane]?.copy(hidden = false)
+        }
+
+        val rawIncoming = lanes.indices.filter { lanes[it]?.awaits == c.hash }
+        val workingIncoming = if (isHeadRow && workingTreeLane != null && workingTreeLane in rawIncoming) {
+            workingTreeLane
+        } else {
+            null
+        }
+        val incoming = if (separateHeadLane && workingIncoming != null) {
+            rawIncoming.filter { it != workingIncoming }
+        } else {
+            rawIncoming
         }
         val node = if (incoming.isEmpty()) firstFreeSlot() else incoming.min()
         val color = if (incoming.isEmpty()) nextColor() else lanes[node]!!.color
         val segments = ArrayList<Seg>()
 
         lanes.forEachIndexed { laneIndex, lane ->
-            if (lane == null) return@forEachIndexed
+            if (lane == null || lane.hidden) return@forEachIndexed
             segments += if (laneIndex in incoming) {
                 Seg(laneIndex, node, lane.color, SegKind.IN, merge = false)
             } else {
@@ -77,13 +103,34 @@ class LaneLayoutEngine(
         }
         incoming.forEach { lanes[it] = null }
 
+        if (isHeadRow && separateHeadLane && workingIncoming != null) {
+            segments += Seg(
+                from = workingIncoming,
+                to = node,
+                color = lanes[workingIncoming]?.color ?: 0,
+                kind = SegKind.IN,
+                merge = false,
+            )
+            lanes[workingIncoming] = null
+            workingTreeMerged = true
+        } else if (isHeadRow && workingIncoming != null) {
+            workingTreeMerged = true
+        }
+
         if (c.parents.isNotEmpty()) {
             lanes[node] = Lane(c.parents[0], color)
             segments += Seg(node, node, color, SegKind.OUT, merge = false)
         }
         for (parent in c.parents.drop(1)) {
-            val existing = lanes.indexOfFirst { it?.awaits == parent }
+            val existing = lanes.indices.firstOrNull { index ->
+                lanes[index]?.awaits == parent && index != workingTreeLane
+            } ?: -1
             if (existing >= 0) {
+                val lane = lanes[existing]!!
+                if (parent == workingTreeHashValue && lane.hidden) {
+                    lanes[existing] = lane.copy(color = color, hidden = false)
+                    headBranchHasChild = true
+                }
                 segments += Seg(node, existing, lanes[existing]!!.color, SegKind.OUT, merge = true)
             } else {
                 val free = firstFreeSlot()
@@ -118,7 +165,7 @@ class LaneLayoutEngine(
         while (lanes.isNotEmpty() && lanes.last() == null) lanes.removeAt(lanes.lastIndex)
     }
 
-    private data class Lane(val awaits: String, val color: Int)
+    private data class Lane(val awaits: String, val color: Int, val hidden: Boolean = false)
 
     private companion object {
         const val COLOR_MASK = 0xFF

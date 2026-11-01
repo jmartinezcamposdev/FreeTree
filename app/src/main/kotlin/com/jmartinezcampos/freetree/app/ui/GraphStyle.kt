@@ -63,8 +63,6 @@ object GraphStyle {
     val NODE_RADIUS: Dp = 4.dp
     val STROKE_WIDTH: Dp = 1.5.dp
     const val MAX_VISIBLE_LANES: Int = 16
-    val ARROW_SIZE: Dp = 6.dp
-    const val ARROW_TOWARD_PARENT: Boolean = true
     const val CENTER_FACTOR: Float = 2f
     const val CURVE_CONTROL_FRACTION: Float = 0.5f
     const val HEAD_HALO_RADIUS_FACTOR: Float = 2f

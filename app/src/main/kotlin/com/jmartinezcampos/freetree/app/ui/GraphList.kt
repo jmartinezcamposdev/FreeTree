@@ -596,7 +596,6 @@ private fun LaneCanvas(
     ) {
         val lane = GraphStyle.LANE_WIDTH.toPx()
         val halfHeight = size.height / GraphStyle.CENTER_FACTOR
-        val arrow = GraphStyle.ARROW_SIZE.toPx()
         fun x(laneIndex: Int): Float = (laneIndex - laneOffset) * lane + lane / GraphStyle.CENTER_FACTOR
 
         for (index in 0 until segments.size) {
@@ -604,7 +603,6 @@ private fun LaneCanvas(
             val workingTreeSegment = workingTreeLane != null &&
                 row <= workingTreeRow &&
                 segment.from == workingTreeLane &&
-                segment.to == workingTreeLane &&
                 (segment.kind == SegKind.PASS ||
                     (row == workingTreeRow && segment.kind == SegKind.IN))
             if (workingTreeSegment) continue
@@ -638,12 +636,6 @@ private fun LaneCanvas(
                         path.cubicTo(fromX, curveY, toX, curveY, toX, size.height)
                     }
                     drawPath(path, color, style = stroke)
-                    if (segment.merge) {
-                        val tipY = if (GraphStyle.ARROW_TOWARD_PARENT) size.height else halfHeight
-                        val baseY = if (GraphStyle.ARROW_TOWARD_PARENT) tipY - arrow else tipY + arrow
-                        drawLine(color, Offset(toX, tipY), Offset(toX - arrow, baseY), GraphStyle.STROKE_WIDTH.toPx())
-                        drawLine(color, Offset(toX, tipY), Offset(toX + arrow, baseY), GraphStyle.STROKE_WIDTH.toPx())
-                    }
                 }
             }
         }
@@ -653,19 +645,32 @@ private fun LaneCanvas(
         val radius = GraphStyle.NODE_RADIUS.toPx()
         if (workingTreeLane != null && row <= workingTreeRow) {
             val linkX = x(workingTreeLane)
-            val endY = if (row == workingTreeRow) nodeY else size.height
-            if (endY > 0f) {
+            val dashStroke = Stroke(
+                width = GraphStyle.STROKE_WIDTH.toPx(),
+                pathEffect = PathEffect.dashPathEffect(
+                    floatArrayOf(
+                        GraphStyle.WORKING_TREE_DASH_ON.toPx(),
+                        GraphStyle.WORKING_TREE_DASH_OFF.toPx(),
+                    ),
+                ),
+            )
+            if (row == workingTreeRow) {
+                val curveY = nodeY * GraphStyle.CURVE_CONTROL_FRACTION
+                path.reset()
+                path.moveTo(linkX, 0f)
+                if (linkX == nodeX) {
+                    path.lineTo(nodeX, nodeY)
+                } else {
+                    path.cubicTo(linkX, curveY, nodeX, curveY, nodeX, nodeY)
+                }
+                drawPath(path, colors.onSurfaceMuted, style = dashStroke)
+            } else {
                 drawLine(
                     color = colors.onSurfaceMuted,
                     start = Offset(linkX, 0f),
-                    end = Offset(linkX, endY),
+                    end = Offset(linkX, size.height),
                     strokeWidth = GraphStyle.STROKE_WIDTH.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(
-                        floatArrayOf(
-                            GraphStyle.WORKING_TREE_DASH_ON.toPx(),
-                            GraphStyle.WORKING_TREE_DASH_OFF.toPx(),
-                        ),
-                    ),
+                    pathEffect = dashStroke.pathEffect,
                 )
             }
         }
