@@ -5,12 +5,19 @@ import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalLocalization
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.rightClick
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
+import androidx.compose.ui.text.AnnotatedString
 import com.jmartinezcampos.freetree.app.smoke.saveScreenshot
 import com.jmartinezcampos.freetree.core.model.DiffLine
 import com.jmartinezcampos.freetree.core.model.DiffLineKind
@@ -18,8 +25,10 @@ import com.jmartinezcampos.freetree.core.model.DiffText
 import com.jmartinezcampos.freetree.core.session.UserMessage
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
+@Suppress("DEPRECATION")
 class DiffViewUiTest {
 
     @Test
@@ -175,6 +184,52 @@ class DiffViewUiTest {
         }
 
     @Test
+    fun diffContextMenuCopyAllCopiesEveryLoadedLineIncludingOffscreen() =
+        runDesktopComposeUiTest(width = 800, height = 600) {
+            val lines = buildList {
+                add(DiffLine(DiffLineKind.HUNK_HEADER, null, null, "@@ -1,200 +1,200 @@"))
+                repeat(200) { index ->
+                    add(DiffLine(DiffLineKind.ADD, null, index + 1, "line ${index + 1}"))
+                }
+            }
+            val clipboard = RecordingClipboard()
+            var copyLabel = ""
+            setContent {
+                CompositionLocalProvider(LocalClipboardManager provides clipboard) {
+                    AppTheme(themeMode = ThemeMode.DARK) {
+                        copyLabel = LocalLocalization.current.copy
+                        DiffView(
+                            diff = DiffText(lines = lines, binary = false, truncated = false),
+                            loading = false,
+                            error = null,
+                            onLoadFull = {},
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+            waitForIdle()
+
+            onNodeWithTag(UiTestTags.diffLine(null, 1)).performMouseInput { rightClick(center) }
+            waitUntil(timeoutMillis = 5_000) {
+                onAllNodesWithTag(UiTestTags.CONTEXT_MENU).fetchSemanticsNodes().isNotEmpty()
+            }
+            onNodeWithTag(UiTestTags.contextMenuItem(copyLabel)).assertExists()
+            onNodeWithTag(UiTestTags.contextMenuItem("Copy all")).assertExists()
+            saveScreenshot("33-diff-context-menu.png")
+
+            onNodeWithTag(UiTestTags.contextMenuItem("Copy all")).performClick()
+            waitForIdle()
+
+            val copiedLines = checkNotNull(clipboard.text).split("\n")
+            assertEquals(201, copiedLines.size)
+            assertEquals("@@ -1,200 +1,200 @@", copiedLines.first())
+            assertEquals("line 1", copiedLines[1])
+            assertEquals("line 200", copiedLines.last())
+            assertTrue(copiedLines.none { it.startsWith("+") })
+        }
+
+    @Test
     fun diffErrorKeepsGitStderrSelectable() = runDesktopComposeUiTest(width = 800, height = 600) {
         setContent {
             CompositionLocalProvider(LocalGraphColors provides GraphStyle.dark) {
@@ -194,5 +249,15 @@ class DiffViewUiTest {
         }
         onNodeWithTag(UiTestTags.DIFF_ERROR).assertExists()
         onNodeWithTag(UiTestTags.ERROR_STDERR).assertTextContains("fatal: bad revision 'missing'")
+    }
+
+    private class RecordingClipboard : ClipboardManager {
+        var text: String? = null
+
+        override fun setText(annotatedString: AnnotatedString) {
+            text = annotatedString.text
+        }
+
+        override fun getText(): AnnotatedString? = text?.let(::AnnotatedString)
     }
 }

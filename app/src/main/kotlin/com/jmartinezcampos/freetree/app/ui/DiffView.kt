@@ -1,5 +1,7 @@
 package com.jmartinezcampos.freetree.app.ui
 
+import androidx.compose.foundation.ContextMenuDataProvider
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,7 +28,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.jmartinezcampos.freetree.core.model.DiffLine
@@ -34,6 +38,9 @@ import com.jmartinezcampos.freetree.core.model.DiffLineKind
 import com.jmartinezcampos.freetree.core.model.DiffText
 import com.jmartinezcampos.freetree.core.session.UserMessage
 
+private const val COPY_ALL_LABEL = "Copy all"
+
+@Suppress("DEPRECATION")
 @Composable
 internal fun DiffView(
     diff: DiffText?,
@@ -45,6 +52,7 @@ internal fun DiffView(
 ) {
     val colors = LocalGraphColors.current
     val listState = rememberLazyListState()
+    val clipboard = LocalClipboardManager.current
     LaunchedEffect(diff) {
         selectionState.clear()
     }
@@ -144,18 +152,32 @@ internal fun DiffView(
                             )
                         }
                     } else {
-                        SelectionContainer(
-                            state = selectionState,
-                            modifier = Modifier.fillMaxSize(),
+                        ContextMenuDataProvider(
+                            items = {
+                                listOf(
+                                    ContextMenuItem(
+                                        label = COPY_ALL_LABEL,
+                                        enabled = true,
+                                        onClick = {
+                                            clipboard.setText(AnnotatedString(diffCopyText(diff)))
+                                        },
+                                    ),
+                                )
+                            },
                         ) {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(end = GraphStyle.SCROLLBAR_GUTTER),
+                            SelectionContainer(
+                                state = selectionState,
+                                modifier = Modifier.fillMaxSize(),
                             ) {
-                                items(items = visibleLines) { line ->
-                                    DiffLineRow(line)
+                                LazyColumn(
+                                    state = listState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(end = GraphStyle.SCROLLBAR_GUTTER),
+                                ) {
+                                    items(items = visibleLines) { line ->
+                                        DiffLineRow(line)
+                                    }
                                 }
                             }
                         }
@@ -171,6 +193,16 @@ internal fun DiffView(
         }
     }
 }
+
+/**
+ * Text copied by "Copy all": every loaded git diff line, in order, with no gutter numbers and no
+ * +/-/space markers. File headers stay out because they are not shown in the diff either.
+ */
+internal fun diffCopyText(diff: DiffText): String =
+    diff.lines
+        .asSequence()
+        .filterNot { it.kind == DiffLineKind.FILE_HEADER }
+        .joinToString("\n") { it.text }
 
 @Composable
 private fun DiffLineRow(line: DiffLine) {
