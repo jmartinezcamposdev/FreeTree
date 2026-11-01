@@ -69,6 +69,18 @@ object UiTestTags {
     const val MESSAGE_STDERR = "message-stderr"
     const val DISMISS_MESSAGE = "dismiss-message"
 
+    const val CONTEXT_MENU = "context-menu"
+    const val COMMIT_NAME_DIALOG = "commit-name-dialog"
+    const val COMMIT_NAME_INPUT = "commit-name-input"
+    const val COMMIT_NAME_ERROR = "commit-name-error"
+    const val COMMIT_NAME_CONFIRM = "commit-name-confirm"
+    const val COMMIT_NAME_CANCEL = "commit-name-cancel"
+    const val DELETE_BRANCH_DIALOG = "delete-branch-dialog"
+    const val DELETE_BRANCH_CONFIRM = "delete-branch-confirm"
+    const val DELETE_BRANCH_CANCEL = "delete-branch-cancel"
+
+    fun contextMenuItem(label: String) = "context-menu-item-$label"
+
     const val DISCARD_DIALOG = "discard-dialog"
     const val DISCARD_CONFIRM = "discard-confirm"
     const val DISCARD_CANCEL = "discard-cancel"

@@ -44,7 +44,7 @@ sealed interface Selection {
     data class Commit(val hash: String) : Selection
 }
 
-enum class BusyOp { STAGE, DISCARD, COMMIT, PUSH, PULL }
+enum class BusyOp { STAGE, DISCARD, COMMIT, PUSH, PULL, CHECKOUT, BRANCH, TAG, DELETE_BRANCH }
 
 sealed interface UserMessage {
     data class Info(val text: String) : UserMessage

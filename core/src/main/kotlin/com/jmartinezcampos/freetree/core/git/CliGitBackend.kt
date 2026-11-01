@@ -274,6 +274,59 @@ class CliGitBackend private constructor(
         environment = mapOf("GIT_MERGE_AUTOEDIT" to "no", "GIT_EDITOR" to "true"),
     )
 
+    override suspend fun checkoutLocal(branch: String): GitResult =
+        runWrite(listOf("checkout", branch), GitCommandType.LOCAL_WRITE)
+
+    override suspend fun checkoutDetached(hash: String): GitResult =
+        runWrite(listOf("checkout", "--detach", hash), GitCommandType.LOCAL_WRITE)
+
+    override suspend fun checkoutRemoteAsLocal(localBranch: String, remoteRef: String): GitResult =
+        runWrite(
+            listOf("checkout", "-b", localBranch, "--track", remoteRef),
+            GitCommandType.LOCAL_WRITE,
+        )
+
+    override suspend fun createBranchAndCheckout(name: String, startHash: String): GitResult =
+        runWrite(listOf("checkout", "-b", name, startHash), GitCommandType.LOCAL_WRITE)
+
+    override suspend fun createTag(name: String, hash: String): GitResult =
+        runWrite(listOf("tag", name, hash), GitCommandType.LOCAL_WRITE)
+
+    override suspend fun deleteLocalBranch(name: String, force: Boolean): GitResult =
+        runWrite(
+            listOf("branch", if (force) "-D" else "-d", name),
+            GitCommandType.LOCAL_WRITE,
+        )
+
+    override suspend fun deleteRemoteBranch(remote: String, branch: String): GitResult =
+        runWrite(
+            listOf("push", remote, "--delete", branch),
+            GitCommandType.NETWORK,
+        )
+
+    override suspend fun isCommitReachableFromHead(hash: String): Boolean {
+        val result = runner.run(listOf("merge-base", "--is-ancestor", hash, "HEAD"))
+        return when (result.exitCode) {
+            0 -> true
+            1 -> false
+            else -> throw GitException(result.exitCode, result.stderr)
+        }
+    }
+
+    override suspend fun localBranchesContaining(hash: String): List<String> =
+        requireText(
+            listOf(
+                "for-each-ref",
+                "--contains",
+                hash,
+                "--format=%(refname:short)",
+                "refs/heads",
+            ),
+        ).lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
+
     override suspend fun gitDirs(): GitDirs = readGitDirs(runner, dirs.workTree)
 
     private suspend fun firstParent(hash: String): String? =

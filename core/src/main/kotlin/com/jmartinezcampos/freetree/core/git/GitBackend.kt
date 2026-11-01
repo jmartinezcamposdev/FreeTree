@@ -31,5 +31,15 @@ interface GitBackend {
     suspend fun push(): GitResult
     suspend fun pull(): GitResult
 
+    suspend fun checkoutLocal(branch: String): GitResult
+    suspend fun checkoutDetached(hash: String): GitResult
+    suspend fun checkoutRemoteAsLocal(localBranch: String, remoteRef: String): GitResult
+    suspend fun createBranchAndCheckout(name: String, startHash: String): GitResult
+    suspend fun createTag(name: String, hash: String): GitResult
+    suspend fun deleteLocalBranch(name: String, force: Boolean): GitResult
+    suspend fun deleteRemoteBranch(remote: String, branch: String): GitResult
+    suspend fun isCommitReachableFromHead(hash: String): Boolean
+    suspend fun localBranchesContaining(hash: String): List<String>
+
     suspend fun gitDirs(): GitDirs
 }

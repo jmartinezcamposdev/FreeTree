@@ -42,6 +42,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 enum class SessionPhase { INACTIVE, ACTIVE, DRAINING }
 
@@ -359,6 +360,34 @@ class RepoSession(
     fun push(): Job = launchWrite(BusyOp.PUSH) { it.push() }
 
     fun pull(): Job = launchWrite(BusyOp.PULL) { it.pull() }
+
+    fun checkoutLocal(branch: String): Job =
+        launchWrite(BusyOp.CHECKOUT) { it.checkoutLocal(branch) }
+
+    fun checkoutDetached(hash: String): Job =
+        launchWrite(BusyOp.CHECKOUT) { it.checkoutDetached(hash) }
+
+    fun checkoutRemoteAsLocal(localBranch: String, remoteRef: String): Job =
+        launchWrite(BusyOp.CHECKOUT) { it.checkoutRemoteAsLocal(localBranch, remoteRef) }
+
+    fun createBranchAndCheckout(name: String, startHash: String): Job =
+        launchWrite(BusyOp.BRANCH) { it.createBranchAndCheckout(name, startHash) }
+
+    fun createTag(name: String, hash: String): Job =
+        launchWrite(BusyOp.TAG) { it.createTag(name, hash) }
+
+    fun deleteLocalBranch(name: String, force: Boolean = false): Job =
+        launchWrite(BusyOp.DELETE_BRANCH) { it.deleteLocalBranch(name, force) }
+
+    fun deleteRemoteBranch(remote: String, branch: String): Job =
+        launchWrite(BusyOp.DELETE_BRANCH) { it.deleteRemoteBranch(remote, branch) }
+
+    suspend fun isBranchDeletionSafe(hash: String, excludedLocalBranch: String? = null): Boolean =
+        withContext(readDispatcher) {
+            val backend = git()
+            backend.isCommitReachableFromHead(hash) ||
+                backend.localBranchesContaining(hash).any { it != excludedLocalBranch }
+        }
 
     fun clearMessage() {
         _state.update { it.copy(message = null) }
@@ -1069,6 +1098,10 @@ class RepoSession(
                 BusyOp.COMMIT -> "Commit created."
                 BusyOp.PUSH -> output.ifBlank { "Push complete." }
                 BusyOp.PULL -> output.ifBlank { "Pull complete." }
+                BusyOp.CHECKOUT -> output.ifBlank { "Checked out." }
+                BusyOp.BRANCH -> output.ifBlank { "Branch created." }
+                BusyOp.TAG -> output.ifBlank { "Tag created." }
+                BusyOp.DELETE_BRANCH -> output.ifBlank { "Branch deleted." }
             }
             UserMessage.Info(text)
         }

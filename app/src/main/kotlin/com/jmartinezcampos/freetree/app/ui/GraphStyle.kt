@@ -145,6 +145,7 @@ object GraphStyle {
     val TOOLBAR_ICON_SIZE: Dp = 12.dp
     val TOOLBAR_ICON_STROKE: Dp = 1.4.dp
     val TOOLBAR_BRANCH_MAX_WIDTH: Dp = 280.dp
+    val CONTEXT_MENU_ITEM_HEIGHT: Dp = 28.dp
     val DIVIDER_THICKNESS: Dp = 1.dp
     val CONTROL_HEIGHT: Dp = 28.dp
     val CHANGE_SECTION_ACTION_HEIGHT: Dp = 24.dp

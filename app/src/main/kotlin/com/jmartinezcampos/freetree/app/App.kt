@@ -25,7 +25,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,6 +47,10 @@ import androidx.compose.ui.platform.testTag
 import com.jmartinezcampos.freetree.app.ui.AppSettingsController
 import com.jmartinezcampos.freetree.app.ui.AppTheme
 import com.jmartinezcampos.freetree.app.ui.ChangesPanel
+import com.jmartinezcampos.freetree.app.ui.CommitActionDialog
+import com.jmartinezcampos.freetree.app.ui.CommitActionDialogHost
+import com.jmartinezcampos.freetree.app.ui.CommitMenuAction
+import com.jmartinezcampos.freetree.app.ui.CommitNameKind
 import com.jmartinezcampos.freetree.app.ui.CommitPanel
 import com.jmartinezcampos.freetree.app.ui.GraphList
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
@@ -63,7 +69,9 @@ import com.jmartinezcampos.freetree.core.session.RepoUiState
 import com.jmartinezcampos.freetree.core.session.Selection
 import com.jmartinezcampos.freetree.core.session.SessionManager
 import com.jmartinezcampos.freetree.core.session.UserMessage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 
 @Composable
 internal fun App(
@@ -117,6 +125,63 @@ private fun AppContent(
     val latestGraphFraction = rememberUpdatedState(graphFraction)
     DisposableEffect(settingsController) {
         onDispose { settingsController.setGraphPaneFraction(latestGraphFraction.value) }
+    }
+    val coroutineScope = rememberCoroutineScope()
+    var commitDialog by remember(session?.id) {
+        mutableStateOf<CommitActionDialog?>(null)
+    }
+
+    fun handleCommitAction(action: CommitMenuAction) {
+        val active = session ?: return
+        when (action) {
+            is CommitMenuAction.CopyText -> Unit
+            is CommitMenuAction.CheckoutLocal -> active.checkoutLocal(action.branch)
+            is CommitMenuAction.CheckoutDetached -> active.checkoutDetached(action.hash)
+            is CommitMenuAction.CheckoutRemote -> active.checkoutRemoteAsLocal(
+                action.localBranch,
+                action.remoteRef,
+            )
+            is CommitMenuAction.CreateBranch -> {
+                commitDialog = CommitActionDialog.CreateName(CommitNameKind.BRANCH, action.hash)
+            }
+            is CommitMenuAction.CreateTag -> {
+                commitDialog = CommitActionDialog.CreateName(CommitNameKind.TAG, action.hash)
+            }
+            is CommitMenuAction.DeleteLocal -> {
+                coroutineScope.launch {
+                    val safe = try {
+                        active.isBranchDeletionSafe(action.hash, action.branch)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        false
+                    }
+                    if (sessionManager.activeSession.value?.id != active.id) return@launch
+                    if (safe) {
+                        active.deleteLocalBranch(action.branch)
+                    } else {
+                        commitDialog = CommitActionDialog.DeleteLocal(action.branch, safe = false)
+                    }
+                }
+            }
+            is CommitMenuAction.DeleteRemote -> {
+                coroutineScope.launch {
+                    val safe = try {
+                        active.isBranchDeletionSafe(action.hash)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        false
+                    }
+                    if (sessionManager.activeSession.value?.id != active.id) return@launch
+                    commitDialog = CommitActionDialog.DeleteRemote(
+                        remote = action.remote,
+                        branch = action.branch,
+                        safe = safe,
+                    )
+                }
+            }
+        }
     }
 
     fun closeActiveTab() {
@@ -201,6 +266,7 @@ private fun AppContent(
                         session = session,
                         viewMode = historyViewMode,
                         showDate = showHistoryDate,
+                        onCommitAction = ::handleCommitAction,
                         modifier = Modifier.weight(graphFraction),
                     )
                     VerticalSplitter(
@@ -232,6 +298,26 @@ private fun AppContent(
             MessageBar(message = message, onDismiss = { session?.clearMessage() })
         }
     }
+
+    CommitActionDialogHost(
+        dialog = commitDialog,
+        onCreateName = { kind, name, hash ->
+            when (kind) {
+                CommitNameKind.BRANCH -> session?.createBranchAndCheckout(name, hash)
+                CommitNameKind.TAG -> session?.createTag(name, hash)
+            }
+            commitDialog = null
+        },
+        onDeleteLocal = { branch ->
+            session?.deleteLocalBranch(branch, force = true)
+            commitDialog = null
+        },
+        onDeleteRemote = { remote, branch ->
+            session?.deleteRemoteBranch(remote, branch)
+            commitDialog = null
+        },
+        onDismiss = { commitDialog = null },
+    )
 }
 
 @Composable

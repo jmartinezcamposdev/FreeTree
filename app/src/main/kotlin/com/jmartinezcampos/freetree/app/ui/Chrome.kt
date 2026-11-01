@@ -359,6 +359,10 @@ private fun busyLabel(op: BusyOp): String = when (op) {
     BusyOp.COMMIT -> "Committing…"
     BusyOp.PUSH -> "Pushing…"
     BusyOp.PULL -> "Pulling…"
+    BusyOp.CHECKOUT -> "Checking out…"
+    BusyOp.BRANCH -> "Creating branch…"
+    BusyOp.TAG -> "Creating tag…"
+    BusyOp.DELETE_BRANCH -> "Deleting branch…"
 }
 
 internal data class FilterCounts(

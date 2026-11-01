@@ -1,5 +1,6 @@
 package com.jmartinezcampos.freetree.app.ui
 
+import androidx.compose.foundation.LocalContextMenuRepresentation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -16,7 +17,10 @@ internal fun AppTheme(
         ThemeMode.DARK -> true
     }
     val colors = GraphStyle.colors(dark)
-    CompositionLocalProvider(LocalGraphColors provides colors) {
+    CompositionLocalProvider(
+        LocalGraphColors provides colors,
+        LocalContextMenuRepresentation provides FreeTreeContextMenuRepresentation,
+    ) {
         MaterialTheme(
             colorScheme = GraphStyle.materialColors(colors, dark),
             typography = GraphStyle.typography,

@@ -71,6 +71,7 @@ internal fun GraphList(
     session: RepoSession?,
     viewMode: HistoryViewMode = HistoryViewMode.COMPACT,
     showDate: Boolean = true,
+    onCommitAction: (CommitMenuAction) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
@@ -264,20 +265,29 @@ internal fun GraphList(
                     key = { index -> graph.hash(index) },
                 ) { row ->
                     val hash = graph.hash(row)
-                    CommitGraphRow(
-                        graph = graph,
-                        row = row,
-                        refs = state.labelsByCommit[hash].orEmpty(),
-                        isHead = hash == headHash && showHead,
-                        isSelected = state.selection is Selection.Commit &&
-                            (state.selection as Selection.Commit).hash == hash,
-                        connectToWorkingTree = row == 0,
-                        visibleLanes = visibleLanes,
-                        laneOffset = laneOffset,
-                        viewMode = viewMode,
-                        showDate = showDate,
-                        onClick = { session?.selectCommit(hash) },
-                    )
+                    CommitContextMenu(
+                        refs = state.refs,
+                        hash = hash,
+                        head = state.head,
+                        busy = state.busy != null,
+                        onAction = onCommitAction,
+                        onSecondaryClick = { session?.selectCommit(hash) },
+                    ) {
+                        CommitGraphRow(
+                            graph = graph,
+                            row = row,
+                            refs = state.labelsByCommit[hash].orEmpty(),
+                            isHead = hash == headHash && showHead,
+                            isSelected = state.selection is Selection.Commit &&
+                                (state.selection as Selection.Commit).hash == hash,
+                            connectToWorkingTree = row == 0,
+                            visibleLanes = visibleLanes,
+                            laneOffset = laneOffset,
+                            viewMode = viewMode,
+                            showDate = showDate,
+                            onClick = { session?.selectCommit(hash) },
+                        )
+                    }
                 }
             }
             ModernScrollbar(
