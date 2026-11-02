@@ -17,7 +17,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
-import com.jmartinezcampos.freetree.app.APP_BUILD_VERSION
 import com.jmartinezcampos.freetree.app.APP_COPYRIGHT
 import com.jmartinezcampos.freetree.app.APP_NAME
 import com.jmartinezcampos.freetree.app.APP_VERSION
@@ -75,7 +74,7 @@ internal fun AboutDialog(
                     color = colors.onSurface,
                 )
                 Text(
-                    "Version $APP_VERSION ($APP_BUILD_VERSION)",
+                    "Version $APP_VERSION",
                     style = MaterialTheme.typography.bodyMedium,
                     color = colors.onSurface,
                 )

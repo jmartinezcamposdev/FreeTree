@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.res.loadImageBitmap
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -133,7 +135,19 @@ fun main(args: Array<String>) {
         }
         DisposableEffect(Unit) { onDispose { manager.close() } }
 
+        // macOS uses the bundle icon and ignores per-window icons.
+        val windowIcon = remember {
+            if (isMacOs()) {
+                null
+            } else {
+                object {}.javaClass.getResourceAsStream("/FreeTree.png")
+                    ?.use(::loadImageBitmap)
+                    ?.let { BitmapPainter(it) }
+            }
+        }
+
         Window(
+            icon = windowIcon,
             onCloseRequest = {
                 saveWindowState(windowState, settingsController)
                 exitApplication()
@@ -271,8 +285,11 @@ private fun saveWindowState(
     settingsController.setWindow(saved)
 }
 
+private fun isMacOs(): Boolean =
+    System.getProperty("os.name").orEmpty().startsWith("Mac", ignoreCase = true)
+
 private fun installMacAboutHandler(onAbout: () -> Unit) {
-    if (!System.getProperty("os.name").startsWith("Mac", ignoreCase = true)) return
+    if (!isMacOs()) return
     try {
         if (Desktop.isDesktopSupported()) {
             val desktop = Desktop.getDesktop()
@@ -286,7 +303,7 @@ private fun installMacAboutHandler(onAbout: () -> Unit) {
 }
 
 private fun installMacPreferencesHandler(onPreferences: () -> Unit) {
-    if (!System.getProperty("os.name").startsWith("Mac", ignoreCase = true)) return
+    if (!isMacOs()) return
     try {
         if (Desktop.isDesktopSupported()) {
             val desktop = Desktop.getDesktop()
