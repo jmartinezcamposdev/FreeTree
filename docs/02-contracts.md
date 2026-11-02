@@ -11,6 +11,7 @@ data class RawCommit(
     val authorName: String,
     val authorTimeSec: Long,
     val subject: String,
+    val authorEmail: String = "",
 )
 
 enum class RefKind { LOCAL_BRANCH, REMOTE_BRANCH, TAG }
@@ -34,6 +35,7 @@ data class LogSpec(
     val since: String? = null,
     val until: String? = null,
     val path: String? = null,
+    val excludeRevs: List<String> = emptyList(),
 ) {
     val flat: Boolean
         get() = author != null || grep != null || since != null || until != null || path != null
@@ -147,6 +149,7 @@ data class TabState(
     val showRemotes: Boolean = true,
     val showTags: Boolean = true,
     val showHead: Boolean = true,
+    val branchFilter: BranchFilter = BranchFilter(),
     val selectedHash: String? = null,
     val scrollAnchorHash: String? = null,
 )
@@ -173,6 +176,10 @@ data class RepoUiState(
     val showRemotes: Boolean = true,
     val showTags: Boolean = true,
     val showHead: Boolean = true,
+    val branchFilter: BranchFilter = BranchFilter(),
+    val filterBusy: Boolean = false,
+    val filterError: String? = null,
+    val filterVisibleRefs: Set<String>? = null,
     val busy: BusyOp? = null,
     val message: UserMessage? = null,
 )
@@ -270,4 +277,24 @@ fun resolve(
     showTags: Boolean,
     showHead: Boolean,
 ): LogSpec
+```
+
+```kotlin
+// core/filter — public rule model and validation
+@Serializable data class FilterRule(
+    val field: FilterField,
+    val text: String = "",
+    val after: String? = null,   // yyyy-MM-dd
+    val before: String? = null,  // yyyy-MM-dd
+)
+@Serializable enum class FilterField { AUTHOR, MESSAGE, DATE }
+@Serializable enum class RuleMode { ANY, ALL }
+@Serializable data class BranchFilter(
+    val includes: List<FilterRule> = emptyList(),
+    val excludes: List<FilterRule> = emptyList(),
+    val includeMode: RuleMode = RuleMode.ANY,
+    val excludeMode: RuleMode = RuleMode.ANY,
+    val commitMode: Boolean = false, // phase 3
+)
+fun validateBranchFilter(filter: BranchFilter): List<FilterRuleError>
 ```

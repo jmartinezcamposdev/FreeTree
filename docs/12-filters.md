@@ -294,6 +294,8 @@ Reuse the branch-picker modal shell: scrim, close button, Escape dismissal, adap
 - Each card scrolls independently with the existing scrollbar/gutter.
 - Cards stack vertically on narrow windows.
 - Empty states: “No includes — all branches are visible.” / “No excludes — nothing is hidden.”
+- The commit-mode checkbox from the full design is phase 3; the baseline omits it rather than
+  shipping a non-functional control.
 
 ### Rule rows
 
@@ -372,36 +374,37 @@ spec; semantic tests use the pure resolver or a real `GitTestRepo`.
 
 **Core**
 
-- [ ] Add `authorEmail` to `RawCommit`, `LOG_FORMAT`, parser, fake backend, scenarios, and tests.
-- [ ] Add `BranchFilter`, `FilterRule`, field/mode enums, validation.
-- [ ] Add the rule matcher (author name/email, subject, strict date range).
-- [ ] Add `NearestBranchTracker` (single-pass BFS, tie-break).
-- [ ] Add `BranchFilterEngine` + `FullScan` + `FilterStats`.
-- [ ] Add pure tests for matcher, tracker, and engine.
+- [x] Add `authorEmail` to `RawCommit`, `LOG_FORMAT`, parser, fake backend, scenarios, and tests.
+- [x] Add `BranchFilter`, `FilterRule`, field/mode enums, validation.
+- [x] Add the rule matcher (author name/email, subject, strict date range).
+- [x] Add `NearestBranchTracker` (single-pass BFS, tie-break).
+- [x] Add `BranchFilterEngine` + `FullScan` + `FilterStats`.
+- [x] Add pure tests for matcher, tracker, and engine.
 
 **Session**
 
-- [ ] Add filter state to `RepoUiState` and `TabState`; persist per tab.
-- [ ] Resolve on apply, persistence restore, and refs/head/toggle changes.
-- [ ] Use visible refs for `LogSpec` and `visibleLabels`.
-- [ ] Tags annotate-only while filtering; HEAD behavior; selection fallback.
-- [ ] Add session tests.
+- [x] Add filter state to `RepoUiState` and `TabState`; persist per tab.
+- [x] Resolve on apply, persistence restore, and refs/head/toggle changes.
+- [x] Use visible refs for `LogSpec` and `visibleLabels`.
+- [x] Tags annotate-only while filtering; HEAD behavior; selection fallback.
+- [x] Add session tests.
 
 **UI**
 
-- [ ] Replace the Filters info dialog with the two-pane modal.
-- [ ] Rule rows with field selector, date inputs, Any/All, validation.
-- [ ] Apply/Cancel/Clear, toolbar badge, per-tab state.
-- [ ] Add UI tests and screenshots.
+- [x] Replace the Filters info dialog with the two-pane modal.
+- [x] Rule rows with field selector, date inputs, Any/All, validation.
+- [x] Apply/Cancel/Clear, toolbar badge, per-tab state.
+- [x] Add UI tests and screenshots.
 
 **Docs**
 
-- [ ] Link this document from `SPEC.md` and the related docs.
+- [x] Link this document from `SPEC.md` and the related docs.
 
 ### Phase 2 — Fast scan + important branches
 
 - [ ] Preferences important-branches editor (defaults `main`, `master`).
-- [ ] `UnmergedWorkScan`, `LogSpec.excludeRevs`, merged-branch detection.
+- [ ] `UnmergedWorkScan` + merged-branch detection (full scan remains the default).
+- [x] `LogSpec.excludeRevs` foundation.
 - [ ] Advanced toggle in the Filters dialog.
 - [ ] Benchmark and caching hooks.
 

@@ -44,7 +44,8 @@ package `Dmg`, `Deb`, `Msi` as applicable. Gate: budgets met or deviations logge
 - [ ] **R3** Staged/unstaged/conflicts; per-file stage/unstage incl. deletes, renames, unborn HEAD;
       multiline commit; state matches `git status`.
 - [ ] **R4** Push/pull work without prompts; full Git errors; no hung processes.
-- [ ] **R5** Manual ref hiding and query filtering; flat mode; syntax errors do not lose the view.
+- [ ] **R5** Manual ref hiding, query filtering, and branch filters with nearest-branch mapping;
+      flat mode; errors do not lose the view. See [12-filters.md](12-filters.md).
 - [ ] **R6** Performance budgets met or deviations documented.
 - [ ] **R7** Independent tab state; T1–T7 green; inactive tabs consume no CPU/process/watcher.
 - [ ] **R8** Runs on macOS, Linux, Windows in that priority; installer at least on macOS.
@@ -71,7 +72,9 @@ package `Dmg`, `Deb`, `Msi` as applicable. Gate: budgets met or deviations logge
 
 LRU snapshots, joining an existing first-parent lane, dotted edges/re-parenting, `is:merge`,
 `branch:` alias, draggable panes, syntax highlighting, side-by-side diff, hunk staging, conflict
-resolution, branch/tag management.
+resolution, branch/tag management. Filter fast scan (unmerged branches + important-branch
+Preferences), commit-level filtering, and the nearest-branch index cache are planned in
+[12-filters.md](12-filters.md).
 
 ## Tracking templates
 

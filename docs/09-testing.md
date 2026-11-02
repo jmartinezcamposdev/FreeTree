@@ -20,17 +20,22 @@ Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
      removed, file remains untracked; unstaged tracked → worktree restored from index; untracked →
      deleted; both → staged keeps the worktree, unstaged keeps the index; conflicts excluded.
 4. **Queries:** table tests for `parseQuery`/`resolve`; compare against equivalent `git rev-list`.
-5. **Sessions/tabs:** T1–T7 with `FakeGitBackend`/`FakeWatcher` and `kotlinx-coroutines-test`:
+5. **Branch filters:** pure tests for field matching, Any/All, strict date boundaries, and
+   nearest-branch mapping (divergence, merges, ties, current/local priority); real-git acceptance
+   for include/exclude by author, email, message, and date plus `LogSpec.excludeRevs`; session tests
+   for spec/labels/persistence/cancellation; UI tests for dialog CRUD, field selector, validation,
+   and screenshots.
+6. **Sessions/tabs:** T1–T7 with `FakeGitBackend`/`FakeWatcher` and `kotlinx-coroutines-test`:
    virtual time, late responses, cancellation, writes surviving tab switches.
-6. **Watcher:** temporary directories; branches, commits, checkout, `git gc` with `packed-refs`.
+7. **Watcher:** temporary directories; branches, commits, checkout, `git gc` with `packed-refs`.
    Tolerant waits (up to ~5 s); no event-order assumptions. Verify on macOS, then Linux, then
    Windows.
-7. **Push/pull:** local bare repo as `origin`: push, fast-forward pull, divergence error, missing
+8. **Push/pull:** local bare repo as `origin`: push, fast-forward pull, divergence error, missing
    upstream error.
-8. **UI smoke:** Compose Desktop test API with `FakeGitBackend`: graph appears, row selection shows
+9. **UI smoke:** Compose Desktop test API with `FakeGitBackend`: graph appears, row selection shows
    files, stage moves a file, discard updates sections, tab switch preserves state. Save PNGs to
    `build/screenshots/`; use `xvfb-run` on headless Linux.
-9. **Performance:** separate `bench` task on the 50k and 200k repos; not part of `check`.
+10. **Performance:** separate `bench` task on the 50k and 200k repos; not part of `check`.
 
 ## Quality gates
 

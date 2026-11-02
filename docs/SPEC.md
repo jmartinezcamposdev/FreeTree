@@ -37,7 +37,7 @@ this page only holds scope, decisions, and the map.
 | R2 | Select a commit to see changed files and per-file diffs. |
 | R3 | Working-tree status, per-file stage/unstage, and commit with a message. |
 | R4 | `push` and `pull` against a configured `origin`, without credential prompts; show Git errors in full. |
-| R5 | Hide/show refs interactively and filter with text queries. |
+| R5 | Hide/show refs interactively; branch filters with nearest-branch mapping and text queries. |
 | R6 | Stay fluid on repositories of roughly 50k–300k commits. |
 | R7 | Multiple tabs, one per repository; only the active repository runs engine work. |
 | R8 | Compose Multiplatform Desktop on macOS, then Linux, then Windows. |

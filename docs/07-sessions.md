@@ -27,6 +27,10 @@ Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
 
 - **Initial/Filter:** cancel previous load, clear, stream. Publish every 2,000 rows or 100 ms; final
   snapshot has `complete = true`.
+- **Branch filter:** resolve before loading the graph. The resolver streams candidate branches,
+  maps matching commits to their nearest branch, updates `filterVisibleRefs` + labels, then the
+  graph loads with only those refs. Re-resolve when refs, hidden refs, remotes, or the filter
+  change; cancellation follows the graph-load sequence.
 - **Refresh:** build in the background, swap atomically, preserve selection by hash and scroll anchor
   (first visible hash; fall back to index).
 - At most one load in flight.
@@ -52,6 +56,10 @@ Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
 - Opening the same repository twice activates the existing tab.
 - Inactive tabs keep their last snapshot (about 80 MB for 200k commits). Accepted for MVP; add a cap
   or LRU only if real usage requires it.
+- `TabState.branchFilter` persists the applied filter per tab. Resolution results are transient.
+- `RepoUiState` exposes `filterBusy`, `filterError`, and `filterVisibleRefs`; the graph spec and
+  `labelsByCommit` are derived from the same visible set. Tags annotate only while a filter is
+  active; HEAD keeps its history when `showHead` is on.
 
 ## Invariants (tests with fakes and virtual time)
 
