@@ -1,5 +1,8 @@
 package com.jmartinezcampos.freetree.core.session
 
+import com.jmartinezcampos.freetree.core.filter.BranchFilter
+import com.jmartinezcampos.freetree.core.filter.FilterField
+import com.jmartinezcampos.freetree.core.filter.FilterRule
 import com.jmartinezcampos.freetree.core.model.GitRef
 import com.jmartinezcampos.freetree.core.model.HeadInfo
 import com.jmartinezcampos.freetree.core.model.RawCommit
@@ -158,6 +161,10 @@ class SessionManagerTest {
         firstSession.applyQuery("author:Ada")
         firstSession.setHiddenRefs(setOf("refs/heads/main"))
         firstSession.setShowTags(false)
+        val filter = BranchFilter(
+            includes = listOf(FilterRule(field = FilterField.AUTHOR, text = "Ada")),
+        )
+        firstSession.setBranchFilter(filter)
         firstSession.selectCommit(firstCommit)
         firstSession.setScrollAnchor(firstCommit, 4)
         advanceUntilIdle()
@@ -178,6 +185,8 @@ class SessionManagerTest {
         assertEquals("author:Ada", firstSession.tab.value.query)
         assertEquals(setOf("refs/heads/main"), firstSession.tab.value.hiddenRefs)
         assertFalse(firstSession.tab.value.showTags)
+        assertEquals(filter, firstSession.tab.value.branchFilter)
+        assertEquals(BranchFilter(), secondSession.tab.value.branchFilter)
         assertEquals(Selection.Commit(firstCommit), firstSession.state.value.selection)
         assertEquals(firstCommit, firstSession.tab.value.selectedHash)
         assertEquals(firstCommit, firstSession.tab.value.scrollAnchorHash)
