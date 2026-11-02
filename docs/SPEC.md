@@ -100,6 +100,7 @@ state on the main thread. One writer per `LaneLayoutEngine`; the UI reads immuta
 | [09-testing.md](09-testing.md) | Test matrix, quality gates, performance budgets. |
 | [10-workflow.md](10-workflow.md) | Workstreams, phases, acceptance criteria, tracking. |
 | [11-edge-cases.md](11-edge-cases.md) | Edge-case checklist. |
+| [12-filters.md](12-filters.md) | Branch filters: rules, nearest-branch mapping, scan modes, UI, phases. |
 
 ## Roadmap
 
