@@ -112,6 +112,7 @@ class RandomDag(
         authorName = author,
         authorTimeSec = timeSec,
         subject = subject,
+        authorEmail = author.lowercase().replace(' ', '.') + "@example.com",
     )
 
     private fun generatedHash(index: Int): String =

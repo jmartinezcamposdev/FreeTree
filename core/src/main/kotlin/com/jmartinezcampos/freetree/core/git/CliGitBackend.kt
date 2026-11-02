@@ -65,7 +65,11 @@ class CliGitBackend private constructor(
             args += it
         }
 
-        val stdin = (distinctRevs.joinToString("\n") + "\n").toByteArray(StandardCharsets.UTF_8)
+        val stdinLines = buildList {
+            addAll(distinctRevs)
+            spec.excludeRevs.distinct().forEach { add("^$it") }
+        }
+        val stdin = (stdinLines.joinToString("\n") + "\n").toByteArray(StandardCharsets.UTF_8)
         val result = runner.streamRecords(args, stdin = stdin) { record ->
             GitParsers.parseLogRecord(record)?.let { send(it) }
         }
@@ -489,7 +493,7 @@ class CliGitBackend private constructor(
     companion object {
         internal const val MAX_DIFF_BYTES: Long = 2L * 1024 * 1024
 
-        private const val LOG_FORMAT = "%H%x1f%P%x1f%an%x1f%at%x1f%s"
+        private const val LOG_FORMAT = "%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%s"
         private const val DETAIL_FORMAT = "%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ct%x1f%B"
 
         private val REFS_COMMAND = listOf(

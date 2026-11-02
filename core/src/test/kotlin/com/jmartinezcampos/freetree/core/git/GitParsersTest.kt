@@ -63,6 +63,7 @@ class GitParsersTest {
         val octopus = commits.single { it.subject == "octopus merge" }
         assertEquals(3, octopus.parents.size)
         assertEquals("Author Ünicode", octopus.authorName)
+        assertEquals("author@example.com", octopus.authorEmail)
         assertEquals(1793273700L, octopus.authorTimeSec)
 
         val root = commits.single { it.subject == "root commit" }

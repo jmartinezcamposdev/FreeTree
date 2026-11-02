@@ -522,6 +522,7 @@ class FakeGitBackend(
             authorName = "Fake Analyst",
             authorTimeSec = now,
             subject = message.lineSequence().firstOrNull().orEmpty(),
+            authorEmail = "fake.analyst@example.com",
         )
         val changed = staged.map { entry ->
             FileChange(

@@ -63,8 +63,8 @@ internal object GitParsers {
     }
 
     fun parseLogRecord(record: String): RawCommit? {
-        val fields = record.split('\u001f', limit = 5)
-        if (fields.size != 5) return null
+        val fields = record.split('\u001f', limit = 6)
+        if (fields.size != 6) return null
 
         val hash = fields[0].trim()
         if (!isObjectId(hash)) return null
@@ -74,13 +74,14 @@ internal object GitParsers {
             .filter { it.isNotEmpty() }
         if (!parents.all(::isObjectId)) return null
 
-        val time = fields[3].trim().toLongOrNull() ?: return null
+        val time = fields[4].trim().toLongOrNull() ?: return null
         return RawCommit(
             hash = hash,
             parents = parents,
             authorName = fields[2],
             authorTimeSec = time,
-            subject = fields[4],
+            subject = fields[5],
+            authorEmail = fields[3],
         )
     }
 

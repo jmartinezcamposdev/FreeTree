@@ -8,6 +8,7 @@ data class RawCommit(
     val authorName: String,
     val authorTimeSec: Long,
     val subject: String,
+    val authorEmail: String = "",
 )
 
 enum class RefKind { LOCAL_BRANCH, REMOTE_BRANCH, TAG }
@@ -31,6 +32,7 @@ data class LogSpec(
     val since: String? = null,
     val until: String? = null,
     val path: String? = null,
+    val excludeRevs: List<String> = emptyList(),
 ) {
     val flat: Boolean
         get() = author != null || grep != null || since != null || until != null || path != null
