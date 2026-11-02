@@ -1,7 +1,8 @@
 # 12 — Filters
 
 Parent: [SPEC.md](SPEC.md). Related: [04-graph.md](04-graph.md), [05-query.md](05-query.md),
-[07-sessions.md](07-sessions.md), [08-ui.md](08-ui.md), [09-testing.md](09-testing.md).
+[07-sessions.md](07-sessions.md), [08-ui.md](08-ui.md), [09-testing.md](09-testing.md),
+[13-performance.md](13-performance.md).
 
 ## Purpose
 
@@ -203,7 +204,7 @@ data class FilterStats(
 ```
 
 - `FullScan` (baseline): all candidate branches, all reachable commits.
-- `UnmergedWorkScan` (phase 2, opt-in): see below.
+- `UnmergedWorkScan` (phase 2, opt-in): see [13-performance.md](13-performance.md).
 - `FilterStats` exists from the baseline for diagnostics and tests.
 
 ### Full scan
@@ -212,34 +213,11 @@ data class FilterStats(
 - Stream all commits reachable from candidates.
 - Nearest mapping within candidates.
 
-### Unmerged-work scan (phase 2, opt-in)
+### Fast scan and future optimizations
 
-- **Important branches** come from a global Preferences list (defaults `main`, `master`), matched by
-  short name; `origin/main` counts as `main`. The definition may expand later.
-- Important branches are always visible and unfiltered.
-- Candidates are displayed branches not fully merged into any important branch.
-- Scan range = commits reachable from candidate tips but not from important branches
-  (`git rev-list <candidates> --not <important>`).
-- Nearest mapping is restricted to candidates.
-- Fully merged branches are omitted while a filter is active; their work lives in the important
-  branch.
-- Default off; enabled by an Advanced option in the Filters dialog.
-
-Implementation notes for phase 2:
-
-- Batch merged detection with `git for-each-ref --merged=<important>`.
-- Use `LogSpec.excludeRevs` (written as `^ref` to `git log --stdin`).
-- Detect the repository default branch from `refs/remotes/origin/HEAD` / `symbolic-ref`, cached per
-  session.
-- If no important branch exists, fall back to full scan.
-
-### Future optimizations enabled by the API
-
-- Cache `visibleRefs` by `(filter, refs digest, head, toggles, scanMode)`.
-- Cache the nearest-branch index per refs snapshot (independent of rules).
-- Push predicates to `git log --author/--grep/--since/--until` inside the scan range.
-- Parallelize branch walks.
-- Add a `RandomDag` benchmark (≈200k commits).
+The opt-in unmerged-work scan (important branches, unique commit ranges, merged-branch handling)
+and the filter performance backlog live in [13-performance.md](13-performance.md). `FullScan` is
+the baseline; the `BranchScan`/`ScanPlan` API above is the extension point.
 
 ## Session and persistence
 
@@ -359,10 +337,10 @@ Reuse the branch-picker modal shell: scrim, close button, Escape dismissal, adap
 `FakeGitBackend.logStream` ignores `LogSpec` filtering, so session/UI tests assert the requested
 spec; semantic tests use the pure resolver or a real `GitTestRepo`.
 
-### Performance (phase 2+)
+### Performance
 
-- `RandomDag` benchmark for full and unmerged-work scans.
-- Verify the unmerged scan does not walk important-branch history.
+Filter performance, benchmarks, and the optimization backlog are in
+[13-performance.md](13-performance.md).
 
 ## Phases and steps
 
@@ -403,10 +381,9 @@ spec; semantic tests use the pure resolver or a real `GitTestRepo`.
 ### Phase 2 — Fast scan + important branches
 
 - [ ] Preferences important-branches editor (defaults `main`, `master`).
-- [ ] `UnmergedWorkScan` + merged-branch detection (full scan remains the default).
-- [x] `LogSpec.excludeRevs` foundation.
 - [ ] Advanced toggle in the Filters dialog.
-- [ ] Benchmark and caching hooks.
+- [x] `LogSpec.excludeRevs` foundation.
+- Fast-scan implementation, benchmark, and caching plan: [13-performance.md](13-performance.md).
 
 ### Phase 3 — Commit mode
 
@@ -415,9 +392,7 @@ spec; semantic tests use the pure resolver or a real `GitTestRepo`.
 
 ### Phase 4 — Performance polish
 
-- [ ] Nearest-branch index cache.
-- [ ] Git predicate pushdown.
-- [ ] Parallel scans.
+See [13-performance.md](13-performance.md).
 
 ## Applied decisions
 

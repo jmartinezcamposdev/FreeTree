@@ -91,8 +91,7 @@ Row height `H`; column `l` at `x = l * W + W / 2`.
 - Parent hashes are not kept after layout; detail requests go to `commitDetail`.
 - Segment layout in a `Long`: `[from:16 | to:16 | color:8 | kind:2 | merge:1]`. Test the codec.
 - Hide the encoding behind `SegmentsView`; the UI must not see it.
-- Target ≤ 400 bytes/commit on the 200k benchmark. If exceeded, the only allowed optimization is
-  delta-encoded `PASS` lanes with checkpoints every 256 rows, behind `SegmentsView`.
+- Memory budget and the only allowed over-budget optimization: [13-performance.md](13-performance.md).
 
 ## Flat mode
 

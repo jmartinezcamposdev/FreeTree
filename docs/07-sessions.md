@@ -54,8 +54,8 @@ Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
   The previous `state.json` and Java `Preferences` values are migrated automatically on first run.
 - Restore tabs without loading them; load only the active one. Missing paths become “unavailable”.
 - Opening the same repository twice activates the existing tab.
-- Inactive tabs keep their last snapshot (about 80 MB for 200k commits). Accepted for MVP; add a cap
-  or LRU only if real usage requires it.
+- Inactive tabs keep their last snapshot. The memory trade-off and cap/LRU policy live in
+  [13-performance.md](13-performance.md).
 - `TabState.branchFilter` persists the applied filter per tab. Resolution results are transient.
 - `RepoUiState` exposes `filterBusy`, `filterError`, and `filterVisibleRefs`; the graph spec and
   `labelsByCommit` are derived from the same visible set. Tags annotate only while a filter is

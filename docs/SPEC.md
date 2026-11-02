@@ -97,10 +97,11 @@ state on the main thread. One writer per `LaneLayoutEngine`; the UI reads immuta
 | [06-watcher.md](06-watcher.md) | Watch paths, event classification, debounce, refresh. |
 | [07-sessions.md](07-sessions.md) | Session lifecycle, tabs, concurrency, persistence. |
 | [08-ui.md](08-ui.md) | Layout, graph list, panels, discard UI, `GraphStyle`. |
-| [09-testing.md](09-testing.md) | Test matrix, quality gates, performance budgets. |
+| [09-testing.md](09-testing.md) | Test matrix and quality gates. |
 | [10-workflow.md](10-workflow.md) | Workstreams, phases, acceptance criteria, tracking. |
 | [11-edge-cases.md](11-edge-cases.md) | Edge-case checklist. |
-| [12-filters.md](12-filters.md) | Branch filters: rules, nearest-branch mapping, scan modes, UI, phases. |
+| [12-filters.md](12-filters.md) | Branch filters: rules, nearest-branch mapping, UI, phases. |
+| [13-performance.md](13-performance.md) | Performance budgets, benchmarks, memory trade-offs, optimization backlog. |
 
 ## Roadmap
 
@@ -110,6 +111,6 @@ state on the main thread. One writer per `LaneLayoutEngine`; the UI reads immuta
 | 1 | Git, graph, query, watcher, fakes | each workstream's tests green |
 | 2 | Sessions and UI against fakes | T1–T7 and UI smoke green |
 | 3 | Real Git integration | `./gradlew check`; manual real-repo flow |
-| 4 | Hardening, performance, packaging | budgets met or deviations logged |
+| 4 | Hardening, performance, packaging | budgets met or deviations logged ([13-performance.md](13-performance.md)) |
 
 Acceptance: see [10-workflow.md](10-workflow.md).
