@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jmartinezcampos.freetree.core.filter.BranchFilter
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -105,6 +106,15 @@ internal sealed interface AppDialog {
         val onSelect: (BranchPickerEntry) -> Unit,
     ) : AppDialog {
         override val tag: String = UiTestTags.BRANCH_PICKER_DIALOG
+    }
+
+    data class Filters(
+        val filter: BranchFilter,
+        val busy: Boolean,
+        val error: String?,
+        val onApply: (BranchFilter) -> Unit,
+    ) : AppDialog {
+        override val tag: String = UiTestTags.FILTERS_DIALOG
     }
 }
 
@@ -148,22 +158,27 @@ internal fun FreeTreeDialogHost(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        val isBranchPicker = dialog is AppDialog.BranchPicker
-        val dialogWidth = if (isBranchPicker) {
-            minOf(
+        val dialogWidth = when (dialog) {
+            is AppDialog.Filters -> minOf(
+                GraphStyle.FILTERS_DIALOG_WIDTH,
+                maxWidth * GraphStyle.FILTERS_DIALOG_WIDTH_FRACTION,
+            )
+            is AppDialog.BranchPicker -> minOf(
                 GraphStyle.BRANCH_PICKER_WIDTH,
                 maxWidth * GraphStyle.BRANCH_PICKER_WIDTH_FRACTION,
             )
-        } else {
-            GraphStyle.DIALOG_WIDTH
+            else -> GraphStyle.DIALOG_WIDTH
         }
-        val dialogHeight = if (isBranchPicker) {
-            minOf(
+        val dialogHeight = when (dialog) {
+            is AppDialog.Filters -> minOf(
+                GraphStyle.FILTERS_DIALOG_MAX_HEIGHT,
+                maxHeight * GraphStyle.FILTERS_DIALOG_HEIGHT_FRACTION,
+            )
+            is AppDialog.BranchPicker -> minOf(
                 GraphStyle.BRANCH_PICKER_MAX_HEIGHT,
                 maxHeight * GraphStyle.BRANCH_PICKER_HEIGHT_FRACTION,
             )
-        } else {
-            null
+            else -> null
         }
         Column(
             modifier = Modifier
@@ -199,6 +214,7 @@ internal fun FreeTreeDialogHost(
                 is AppDialog.Prompt -> PromptContent(dialog, controller)
                 is AppDialog.Confirm -> ConfirmContent(dialog, controller)
                 is AppDialog.BranchPicker -> BranchPickerContent(dialog, controller)
+                is AppDialog.Filters -> FiltersContent(dialog, controller)
             }
         }
     }
@@ -665,7 +681,7 @@ private fun PromptContent(dialog: AppDialog.Prompt, controller: AppDialogControl
 }
 
 @Composable
-private fun DialogHeader(
+internal fun DialogHeader(
     title: String,
     onDismiss: () -> Unit,
 ) {
@@ -767,7 +783,7 @@ private fun DialogWarning(text: String) {
 }
 
 @Composable
-private fun DialogActions(content: @Composable () -> Unit) {
+internal fun DialogActions(content: @Composable () -> Unit) {
     Spacer(Modifier.height(GraphStyle.DIALOG_ACTIONS_TOP_SPACE))
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -777,29 +793,33 @@ private fun DialogActions(content: @Composable () -> Unit) {
     )
 }
 
-private enum class DialogButtonKind { Primary, Secondary, Destructive }
+internal enum class DialogButtonKind { Primary, Secondary, Destructive }
 
 @Composable
-private fun DialogButton(
+internal fun DialogButton(
     label: String,
     onClick: () -> Unit,
     kind: DialogButtonKind,
     testTag: String? = null,
+    enabled: Boolean = true,
 ) {
     val colors = LocalGraphColors.current
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
     val shape = RoundedCornerShape(GraphStyle.DIALOG_CONTROL_CORNER_RADIUS)
 
-    val background = when (kind) {
-        DialogButtonKind.Primary -> if (hovered) colors.primary.copy(alpha = 0.90f) else colors.primary
-        DialogButtonKind.Secondary -> if (hovered) colors.hoverRow else colors.surface
-        DialogButtonKind.Destructive -> if (hovered) colors.destructive.copy(alpha = 0.90f) else colors.destructive
+    val background = when {
+        !enabled -> colors.surfaceRaised
+        kind == DialogButtonKind.Primary ->
+            if (hovered) colors.primary.copy(alpha = 0.90f) else colors.primary
+        kind == DialogButtonKind.Secondary -> if (hovered) colors.hoverRow else colors.surface
+        else -> if (hovered) colors.destructive.copy(alpha = 0.90f) else colors.destructive
     }
-    val foreground = when (kind) {
-        DialogButtonKind.Primary -> colors.onPrimary
-        DialogButtonKind.Secondary -> colors.onSurface
-        DialogButtonKind.Destructive -> colors.onDestructive
+    val foreground = when {
+        !enabled -> colors.onSurfaceMuted
+        kind == DialogButtonKind.Primary -> colors.onPrimary
+        kind == DialogButtonKind.Secondary -> colors.onSurface
+        else -> colors.onDestructive
     }
     val fontWeight = when (kind) {
         DialogButtonKind.Primary, DialogButtonKind.Destructive -> FontWeight.SemiBold
@@ -821,6 +841,7 @@ private fun DialogButton(
             )
             .hoverable(interactionSource)
             .clickable(
+                enabled = enabled,
                 interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick,

@@ -329,6 +329,22 @@ internal fun Toolbar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
         ) {
+            if (state.filterBusy) {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(GraphStyle.BUSY_INDICATOR_SIZE)
+                        .testTag(UiTestTags.FILTERS_BUSY),
+                    color = colors.primary,
+                    strokeWidth = GraphStyle.STROKE_WIDTH,
+                )
+            }
+            if (state.branchFilter.activeRuleCount > 0) {
+                FilterCountBadge(
+                    label = "Filters",
+                    count = state.branchFilter.activeRuleCount,
+                    tag = UiTestTags.FILTERS_ACTIVE_COUNT,
+                )
+            }
             if (counts.branch > 0) {
                 FilterCountBadge(
                     label = "Branches",

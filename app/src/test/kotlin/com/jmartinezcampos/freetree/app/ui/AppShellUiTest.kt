@@ -82,14 +82,19 @@ class AppShellUiTest {
                 onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertDoesNotExist()
                 onNodeWithText("↑1 ↓2").assertExists()
 
+                onNodeWithTag(UiTestTags.FILTERS_ACTIVE_COUNT).assertDoesNotExist()
                 onNodeWithTag(UiTestTags.FILTERS_BUTTON).performClick()
-                onNodeWithTag(UiTestTags.FILTERS_INFO_DIALOG).assertExists()
-                onNodeWithText(
-                    "Editing filters will be supported in a future version of FreeTree.",
-                ).assertExists()
-                saveScreenshot("26-filters-info-dialog.png")
-                onNodeWithTag(UiTestTags.FILTERS_INFO_OK).performClick()
-                onNodeWithTag(UiTestTags.FILTERS_INFO_DIALOG).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.FILTERS_DIALOG).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_INCLUDE_SECTION, useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_EXCLUDE_SECTION, useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_ADD_INCLUDE).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_ADD_EXCLUDE).assertExists()
+                onNodeWithText("No includes — all branches are visible.", useUnmergedTree = true).assertExists()
+                onNodeWithText("No excludes — nothing is hidden.", useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_APPLY).assertExists()
+                saveScreenshot("34-filters-dialog.png")
+                onNodeWithTag(UiTestTags.FILTERS_CANCEL).performClick()
+                onNodeWithTag(UiTestTags.FILTERS_DIALOG).assertDoesNotExist()
 
                 fixture.backend.clearCalls()
                 onNodeWithTag(UiTestTags.PULL).performClick()

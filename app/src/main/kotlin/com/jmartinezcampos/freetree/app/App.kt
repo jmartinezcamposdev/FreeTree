@@ -314,13 +314,16 @@ private fun AppContent(
                 }
             },
             onFiltersClick = {
-                dialogController.show(
-                    AppDialog.Info(
-                        tag = UiTestTags.FILTERS_INFO_DIALOG,
-                        title = "Filters",
-                        message = "Editing filters will be supported in a future version of FreeTree.",
-                    ),
-                )
+                session?.let { active ->
+                    dialogController.show(
+                        AppDialog.Filters(
+                            filter = state.branchFilter,
+                            busy = state.filterBusy,
+                            error = state.filterError,
+                            onApply = { active.setBranchFilter(it) },
+                        ),
+                    )
+                }
             },
         )
         Divider()
