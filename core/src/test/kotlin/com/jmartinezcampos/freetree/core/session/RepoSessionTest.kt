@@ -1,5 +1,8 @@
 package com.jmartinezcampos.freetree.core.session
 
+import com.jmartinezcampos.freetree.core.filter.BranchFilter
+import com.jmartinezcampos.freetree.core.filter.FilterField
+import com.jmartinezcampos.freetree.core.filter.FilterRule
 import com.jmartinezcampos.freetree.core.model.DiffTarget
 import com.jmartinezcampos.freetree.core.model.DiffText
 import com.jmartinezcampos.freetree.core.model.FileChange
@@ -14,6 +17,7 @@ import com.jmartinezcampos.freetree.core.model.StatusKind
 import com.jmartinezcampos.freetree.core.model.WorkingStatus
 import com.jmartinezcampos.freetree.core.testing.FakeGitBackend
 import com.jmartinezcampos.freetree.core.testing.FakeMethod
+import com.jmartinezcampos.freetree.core.testing.FakeRepoScenarios
 import com.jmartinezcampos.freetree.core.testing.FakeWatcher
 import com.jmartinezcampos.freetree.core.testing.RandomDag
 import com.jmartinezcampos.freetree.core.watch.RepoWatcher
@@ -787,6 +791,137 @@ class RepoSessionTest {
         session.close()
     }
 
+    @Test
+    fun branchFilterResolvesNearestBranchAndUsesItForSpecAndLabels() = runTest {
+        val scenario = FakeRepoScenarios.standard()
+        val backend = scenario.backend()
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+
+        val filter = BranchFilter(
+            includes = listOf(FilterRule(field = FilterField.MESSAGE, text = "Add graph panel")),
+        )
+        assertTrue(session.setBranchFilter(filter))
+        advanceUntilIdle()
+
+        val state = session.state.value
+        assertEquals(filter, state.branchFilter)
+        assertEquals(filter, session.tab.value.branchFilter)
+        assertEquals(setOf("refs/heads/topic"), state.filterVisibleRefs)
+        assertFalse(state.filterBusy)
+        assertNull(state.filterError)
+        assertEquals(
+            listOf("refs/heads/topic"),
+            backend.callsOf(FakeMethod.LOG).last().spec?.revs,
+        )
+        val tipLabels = state.labelsByCommit[FakeRepoScenarios.hash(8)].orEmpty()
+            .filter { it.kind != RefKind.TAG }
+            .map { it.fullName }
+        assertEquals(listOf("refs/heads/topic"), tipLabels)
+        session.close()
+    }
+
+    @Test
+    fun branchFilterExcludesOnlyTheNearestRef() = runTest {
+        val scenario = FakeRepoScenarios.standard()
+        val backend = scenario.backend()
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+
+        val filter = BranchFilter(
+            excludes = listOf(FilterRule(field = FilterField.MESSAGE, text = "Add graph panel")),
+        )
+        assertTrue(session.setBranchFilter(filter))
+        advanceUntilIdle()
+
+        assertEquals(
+            setOf(
+                "refs/heads/main",
+                "refs/remotes/origin/main",
+                "refs/remotes/origin/topic",
+            ),
+            session.state.value.filterVisibleRefs,
+        )
+        assertEquals(
+            listOf("refs/heads/main", "refs/remotes/origin/main", "refs/remotes/origin/topic"),
+            backend.callsOf(FakeMethod.LOG).last().spec?.revs,
+        )
+        session.close()
+    }
+
+    @Test
+    fun clearingTheFilterRestoresAllRefsAndTags() = runTest {
+        val scenario = FakeRepoScenarios.standard()
+        val backend = scenario.backend()
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+
+        session.setBranchFilter(
+            BranchFilter(includes = listOf(FilterRule(field = FilterField.MESSAGE, text = "Add graph panel"))),
+        )
+        advanceUntilIdle()
+        backend.clearCalls()
+
+        session.setBranchFilter(BranchFilter())
+        advanceUntilIdle()
+
+        assertNull(session.state.value.filterVisibleRefs)
+        val spec = backend.callsOf(FakeMethod.LOG).last().spec!!
+        assertTrue("refs/tags/v1.0" in spec.revs)
+        assertTrue("refs/heads/main" in spec.revs)
+        session.close()
+    }
+
+    @Test
+    fun invalidFilterIsRejectedWithoutReloading() = runTest {
+        val scenario = FakeRepoScenarios.standard()
+        val backend = scenario.backend()
+        val session = session(backend, FakeWatcher())
+        session.activate()
+        advanceUntilIdle()
+        backend.clearCalls()
+
+        val applied = session.setBranchFilter(
+            BranchFilter(includes = listOf(FilterRule(field = FilterField.AUTHOR, text = "  "))),
+        )
+        advanceUntilIdle()
+
+        assertFalse(applied)
+        assertNotNull(session.state.value.filterError)
+        assertEquals(BranchFilter(), session.state.value.branchFilter)
+        assertEquals(0, backend.callCount(FakeMethod.LOG))
+        session.close()
+    }
+
+    @Test
+    fun restoredFilterResolvesDuringActivation() = runTest {
+        val scenario = FakeRepoScenarios.standard()
+        val backend = scenario.backend()
+        val filter = BranchFilter(
+            includes = listOf(FilterRule(field = FilterField.MESSAGE, text = "Add graph panel")),
+        )
+        val session = session(
+            backend,
+            FakeWatcher(),
+            TabState(id = "tab", path = sessionPath.toString(), branchFilter = filter),
+        )
+
+        assertEquals(filter, session.state.value.branchFilter)
+        assertTrue(session.state.value.filterBusy)
+
+        session.activate()
+        advanceUntilIdle()
+
+        assertEquals(setOf("refs/heads/topic"), session.state.value.filterVisibleRefs)
+        assertFalse(session.state.value.filterBusy)
+        session.close()
+    }
+
     private fun backend(
         commits: List<RawCommit>,
         status: WorkingStatus = WorkingStatus(
@@ -815,12 +950,16 @@ class RepoSessionTest {
         dirs = dirs,
     )
 
-    private fun TestScope.session(backend: FakeGitBackend, watcher: RepoWatcher): RepoSession {
+    private fun TestScope.session(
+        backend: FakeGitBackend,
+        watcher: RepoWatcher,
+        tab: TabState = TabState(id = "tab", path = sessionPath.toString()),
+    ): RepoSession {
         val dispatcher = StandardTestDispatcher(testScheduler)
         return RepoSession(
             id = "tab",
             path = sessionPath,
-            initialTab = TabState(id = "tab", path = sessionPath.toString()),
+            initialTab = tab,
             backendFactory = { backend },
             watcherFactory = { watcher },
             readDispatcher = dispatcher,

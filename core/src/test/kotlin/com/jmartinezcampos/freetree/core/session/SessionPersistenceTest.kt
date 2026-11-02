@@ -1,5 +1,8 @@
 package com.jmartinezcampos.freetree.core.session
 
+import com.jmartinezcampos.freetree.core.filter.BranchFilter
+import com.jmartinezcampos.freetree.core.filter.FilterField
+import com.jmartinezcampos.freetree.core.filter.FilterRule
 import java.nio.file.Files
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,6 +23,14 @@ class SessionPersistenceTest {
                     path = "/repo/one",
                     query = "author:Ada",
                     hiddenRefs = setOf("refs/heads/topic"),
+                    branchFilter = BranchFilter(
+                        includes = listOf(
+                            FilterRule(field = FilterField.AUTHOR, text = "Ada"),
+                        ),
+                        excludes = listOf(
+                            FilterRule(field = FilterField.DATE, after = "2024-01-01"),
+                        ),
+                    ),
                     selectedHash = "abc",
                     scrollAnchorHash = "def",
                 ),

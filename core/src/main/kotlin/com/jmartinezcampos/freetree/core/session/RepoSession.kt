@@ -1,5 +1,9 @@
 package com.jmartinezcampos.freetree.core.session
 
+import com.jmartinezcampos.freetree.core.filter.BranchFilter
+import com.jmartinezcampos.freetree.core.filter.BranchFilterEngine
+import com.jmartinezcampos.freetree.core.filter.BranchFilterRequest
+import com.jmartinezcampos.freetree.core.filter.validateBranchFilter
 import com.jmartinezcampos.freetree.core.git.GitBackend
 import com.jmartinezcampos.freetree.core.graph.GraphSnapshot
 import com.jmartinezcampos.freetree.core.graph.LaneLayoutEngine
@@ -67,6 +71,7 @@ class RepoSession(
     private val backendMutex = Mutex()
     private val graphMutex = Mutex()
     private val writeMutex = Mutex()
+    private val filterEngine = BranchFilterEngine()
 
     private val initialQuery = parseQuery(initialTab.query)
     private val normalizedInitialTab = initialTab.copy(path = this.path.toString())
@@ -82,6 +87,8 @@ class RepoSession(
             showRemotes = normalizedInitialTab.showRemotes,
             showTags = normalizedInitialTab.showTags,
             showHead = normalizedInitialTab.showHead,
+            branchFilter = normalizedInitialTab.branchFilter,
+            filterBusy = normalizedInitialTab.branchFilter.isActive,
             selection = normalizedInitialTab.selectedHash?.let(Selection::Commit) ?: Selection.WorkingTree,
         ),
     )
@@ -127,6 +134,9 @@ class RepoSession(
     private var selectionJob: Job? = null
     private var diffJob: Job? = null
     private var diffSequence = 0L
+
+    @Volatile
+    private var lastFilterDigest: String? = null
 
     @Volatile
     private var openDiffUnlimited = false
@@ -176,7 +186,9 @@ class RepoSession(
                 SessionPhase.DRAINING
             }
             if (_state.value.graph?.complete == true) {
-                _state.update { it.copy(load = LoadState.Idle) }
+                _state.update { it.copy(load = LoadState.Idle, filterBusy = false) }
+            } else if (_state.value.filterBusy) {
+                _state.update { it.copy(filterBusy = false) }
             }
         }
         scope?.cancel()
@@ -199,9 +211,30 @@ class RepoSession(
         if (reload) requestGraphLoad(LoadMode.CLEAR)
     }
 
+    fun setBranchFilter(filter: BranchFilter): Boolean {
+        val errors = validateBranchFilter(filter)
+        if (errors.isNotEmpty()) {
+            _state.update { it.copy(filterError = errors.first().message) }
+            return false
+        }
+        _state.update { it.copy(branchFilter = filter, filterError = null) }
+        updateTab { it.copy(branchFilter = filter) }
+        requestGraphLoad(LoadMode.CLEAR)
+        return true
+    }
+
     fun setHiddenRefs(hidden: Set<String>) {
-        _state.update {
-            it.copy(hiddenRefs = hidden, labelsByCommit = visibleLabels(it.refs, hidden, it.showRemotes, it.showTags))
+        _state.update { state ->
+            state.copy(
+                hiddenRefs = hidden,
+                labelsByCommit = visibleLabels(
+                    state.refs,
+                    hidden,
+                    state.showRemotes,
+                    state.showTags,
+                    state.filterVisibleRefs,
+                ),
+            )
         }
         updateTab { it.copy(hiddenRefs = hidden) }
         requestGraphLoad(LoadMode.CLEAR)
@@ -213,16 +246,34 @@ class RepoSession(
     }
 
     fun setShowRemotes(show: Boolean) {
-        _state.update {
-            it.copy(showRemotes = show, labelsByCommit = visibleLabels(it.refs, it.hiddenRefs, show, it.showTags))
+        _state.update { state ->
+            state.copy(
+                showRemotes = show,
+                labelsByCommit = visibleLabels(
+                    state.refs,
+                    state.hiddenRefs,
+                    show,
+                    state.showTags,
+                    state.filterVisibleRefs,
+                ),
+            )
         }
         updateTab { it.copy(showRemotes = show) }
         requestGraphLoad(LoadMode.CLEAR)
     }
 
     fun setShowTags(show: Boolean) {
-        _state.update {
-            it.copy(showTags = show, labelsByCommit = visibleLabels(it.refs, it.hiddenRefs, it.showRemotes, show))
+        _state.update { state ->
+            state.copy(
+                showTags = show,
+                labelsByCommit = visibleLabels(
+                    state.refs,
+                    state.hiddenRefs,
+                    state.showRemotes,
+                    show,
+                    state.filterVisibleRefs,
+                ),
+            )
         }
         updateTab { it.copy(showTags = show) }
         requestGraphLoad(LoadMode.CLEAR)
@@ -539,7 +590,13 @@ class RepoSession(
                 it.copy(
                     refs = refs,
                     head = head,
-                    labelsByCommit = visibleLabels(refs, it.hiddenRefs, it.showRemotes, it.showTags),
+                    labelsByCommit = visibleLabels(
+                        refs,
+                        it.hiddenRefs,
+                        it.showRemotes,
+                        it.showTags,
+                        it.filterVisibleRefs,
+                    ),
                 )
             }
         }
@@ -801,6 +858,8 @@ class RepoSession(
             return
         }
 
+        if (!ensureFilterResolved(activation, backend)) return
+
         val spec = currentSpec()
         val previousState = _state.value
         val refsAtStart = previousState.refs.toList()
@@ -987,14 +1046,122 @@ class RepoSession(
         }
     }
 
+    private suspend fun ensureFilterResolved(activation: Int, backend: GitBackend): Boolean {
+        val snapshot = _state.value
+        val filter = snapshot.branchFilter
+        if (!filter.isActive) {
+            lastFilterDigest = null
+            synchronized(lock) {
+                if (!isCurrentLocked(activation)) return false
+                _state.update { state ->
+                    state.copy(
+                        filterVisibleRefs = null,
+                        filterBusy = false,
+                        filterError = null,
+                        labelsByCommit = visibleLabels(
+                            state.refs,
+                            state.hiddenRefs,
+                            state.showRemotes,
+                            state.showTags,
+                            null,
+                        ),
+                    )
+                }
+            }
+            return true
+        }
+
+        val digest = filterDigest(snapshot)
+        if (digest == lastFilterDigest && snapshot.filterVisibleRefs != null) return true
+
+        synchronized(lock) {
+            if (!isCurrentLocked(activation)) return false
+            _state.update { it.copy(filterBusy = true, filterError = null) }
+        }
+
+        val request = BranchFilterRequest(
+            filter = filter,
+            refs = snapshot.refs,
+            hiddenRefs = snapshot.hiddenRefs,
+            showRemotes = snapshot.showRemotes,
+        )
+        val plan = filterEngine.plan(request)
+        val visible = try {
+            if (plan.scanRevs.isEmpty()) {
+                emptySet()
+            } else {
+                val spec = LogSpec(
+                    revs = plan.scanRevs,
+                    includeHead = false,
+                    excludeRevs = plan.excludeRevs,
+                )
+                filterEngine.resolve(request, backend.logStream(spec))
+                    .visibleRefs
+                    .map { it.fullName }
+                    .toSet()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            synchronized(lock) {
+                if (isCurrentLocked(activation)) {
+                    _state.update { it.copy(filterBusy = false, filterError = describe(e)) }
+                }
+            }
+            publishReadMessage(
+                activation,
+                UserMessage.Error("Could not apply filters. ${describe(e)}", stderr(e)),
+            )
+            return false
+        }
+
+        synchronized(lock) {
+            if (!isCurrentLocked(activation)) return false
+            lastFilterDigest = digest
+            _state.update { state ->
+                state.copy(
+                    filterVisibleRefs = visible,
+                    filterBusy = false,
+                    filterError = null,
+                    labelsByCommit = visibleLabels(
+                        state.refs,
+                        state.hiddenRefs,
+                        state.showRemotes,
+                        state.showTags,
+                        visible,
+                    ),
+                )
+            }
+        }
+        return true
+    }
+
+    private fun filterDigest(state: RepoUiState): String = buildString {
+        append(state.showRemotes).append('|')
+        append(state.hiddenRefs.sorted().joinToString(",")).append('|')
+        state.refs.sortedBy { it.fullName }.forEach {
+            append(it.fullName).append('=').append(it.commit).append(':').append(it.isCurrentBranch).append(';')
+        }
+        append(state.branchFilter)
+    }
+
     private fun currentSpec(): LogSpec {
         val snapshot = _state.value
+        val filterActive = snapshot.branchFilter.isActive
+        val visible = snapshot.filterVisibleRefs
+        val refs = when {
+            !filterActive -> snapshot.refs
+            visible == null -> emptyList()
+            else -> snapshot.refs.filter { ref ->
+                ref.kind != RefKind.TAG && ref.fullName in visible
+            }
+        }
         return resolve(
             lastValidQuery,
-            snapshot.refs,
+            refs,
             snapshot.hiddenRefs,
             snapshot.showRemotes,
-            snapshot.showTags,
+            if (filterActive) false else snapshot.showTags,
             snapshot.showHead,
         )
     }
@@ -1085,7 +1252,13 @@ class RepoSession(
                 it.copy(
                     refs = refs,
                     head = head,
-                    labelsByCommit = visibleLabels(refs, it.hiddenRefs, it.showRemotes, it.showTags),
+                    labelsByCommit = visibleLabels(
+                        refs,
+                        it.hiddenRefs,
+                        it.showRemotes,
+                        it.showTags,
+                        it.filterVisibleRefs,
+                    ),
                 )
             }
         }
@@ -1238,6 +1411,7 @@ private fun visibleLabels(
     hidden: Set<String>,
     showRemotes: Boolean,
     showTags: Boolean,
+    visibleRefs: Set<String>? = null,
 ): Map<String, List<GitRef>> = refs
     .filter { ref ->
         ref.fullName !in hidden &&
@@ -1245,7 +1419,8 @@ private fun visibleLabels(
                 RefKind.LOCAL_BRANCH -> true
                 RefKind.REMOTE_BRANCH -> showRemotes
                 RefKind.TAG -> showTags
-            }
+            } &&
+            (visibleRefs == null || ref.kind == RefKind.TAG || ref.fullName in visibleRefs)
     }
     .groupBy { it.commit }
 

@@ -1,5 +1,6 @@
 package com.jmartinezcampos.freetree.core.session
 
+import com.jmartinezcampos.freetree.core.filter.BranchFilter
 import com.jmartinezcampos.freetree.core.graph.GraphSnapshot
 import com.jmartinezcampos.freetree.core.model.CommitDetail
 import com.jmartinezcampos.freetree.core.model.DiffTarget
@@ -28,6 +29,10 @@ data class RepoUiState(
     val showRemotes: Boolean = true,
     val showTags: Boolean = true,
     val showHead: Boolean = true,
+    val branchFilter: BranchFilter = BranchFilter(),
+    val filterBusy: Boolean = false,
+    val filterError: String? = null,
+    val filterVisibleRefs: Set<String>? = null,
     val busy: BusyOp? = null,
     val message: UserMessage? = null,
 )
