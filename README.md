@@ -3,8 +3,8 @@
 FreeTree is a desktop Git client focused on making repository history easy to read and navigate.
 It renders the commit graph with lanes, merge edges, and branch/tag/HEAD labels, so you can see how
 work diverged and came together without dropping into the terminal. From the same window you can
-inspect commits, review changed files and unified diffs, stage or discard working-tree changes, and
-push or pull against the configured `origin`.
+inspect commits, review changed files and unified diffs, stage, discard, or commit changes, check
+out branches and commits, and push or pull against the configured `origin`.
 
 ![FreeTree main window](docs/example/example_screenshot.png)
 
@@ -12,17 +12,24 @@ FreeTree is built with Kotlin and Compose Multiplatform Desktop. It uses the sys
 its source of truth and never writes directly into `.git`.
 
 > **Status: alpha / work in progress.** FreeTree is usable for everyday repository browsing and
-> basic staging, committing, and push/pull, but it is still being hardened. Expect rough edges,
-> incomplete workflows, and possible breaking changes. Back up important work and prefer a normal
-> Git client or the command line for destructive operations.
+> basic staging, committing, branch operations, and push/pull, but it is still being hardened.
+> Expect rough edges, incomplete workflows, and possible breaking changes. Back up important work
+> and prefer a normal Git client or the command line for destructive operations.
 
 ## What this program can do
 
 - Browse a visual commit graph with stable lanes, merge arrows, and ref chips.
 - Open a commit to see its metadata, changed files, and unified diff.
 - Review working-tree status and stage, unstage, discard, or commit changes.
-- Push and pull against `origin` without credential prompts.
-- Filter history by refs, author, message, date, or path; hide refs interactively.
+- Push and pull against `origin` without credential prompts, setting upstream when needed.
+- Filter branches with include/exclude rules for author, message, or date, and filter history by
+  refs, author, message, date, or path; hide refs interactively.
+- Check out branches or commits, create and switch branches, create tags, and delete branches from
+  the commit context menu.
+- Switch branches with a searchable picker.
+- Copy diff text or all loaded diff lines.
+- Customize the theme, history row layout, and panel layout; window geometry, preferences, and
+  session state are restored on launch.
 - Keep multiple repositories open in tabs, with only the active repository doing engine work.
 - Navigate the graph and panels with the keyboard.
 
@@ -36,8 +43,8 @@ its source of truth and never writes directly into `.git`.
 
 ## Modules
 
-- `core/` — pure Kotlin/JVM. Models, Git backend, graph, query, watcher, and session code. No
-  Compose.
+- `core/` — pure Kotlin/JVM. Models, Git backend, graph, query, filters, watcher, and session
+  code. No Compose.
 - `app/` — Compose Multiplatform Desktop application.
 
 ## Commands
@@ -50,7 +57,7 @@ its source of truth and never writes directly into `.git`.
 ./gradlew :core:test
 ./gradlew :app:test
 
-# Quality gate: all tests plus static checks (not benchmarks, not screen-dependent UI tests)
+# Quality gate: all tests plus compile checks (not benchmarks, not screen-dependent UI tests)
 ./gradlew check
 
 # Build everything
@@ -81,7 +88,7 @@ Without an argument, FreeTree restores the previous session or shows the empty s
 | `Enter` in the query field | Apply the query |
 
 The menu bar also exposes repository actions, recent repositories, ref visibility, window
-navigation, and About FreeTree.
+navigation, About FreeTree, Preferences, and Messages Log.
 
 ## Packaging
 
@@ -130,15 +137,17 @@ git commit-graph write --reachable
 FreeTree **never** runs this automatically; it only reads the repository. Re-run it after large
 history changes if log performance degrades.
 
-## Known limits (MVP)
+## Known limits
 
 - No conflict resolution, hunk/line staging, rebase, cherry-pick, reset, stash, amend, or `fetch`.
-- No branch/tag creation or deletion, and no credential management.
-- No syntax highlighting, side-by-side diff, file editing, draggable panes, or submodule
-  management.
+- No credential management.
+- No syntax highlighting, side-by-side diff, file editing, or submodule management.
+- Branch filters support author, message, and date rules only; no regex, commit-body, or path
+  rules.
 - Multiple tabs, but only the active repository runs engine work. Inactive tabs keep their last
   immutable snapshot.
-- Worktrees and submodules are shown as ordinary working trees and must not break the app.
+- Worktrees and submodules are treated as ordinary working trees; there is no dedicated management
+  UI.
 - Diffs larger than 2 MB and binary files are truncated or labelled; loading a full diff is an
   explicit action.
 
@@ -153,16 +162,3 @@ the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See
 [GNU General Public License](LICENSE) for more details.
 
 SPDX-License-Identifier: GPL-2.0-or-later
-
-## Documentation
-
-- [docs/SPEC.md](docs/SPEC.md) — specification index and decisions
-- [docs/01-bootstrap.md](docs/01-bootstrap.md) — layout and Phase 0
-- [docs/09-testing.md](docs/09-testing.md) — test matrix, quality gates, performance targets
-
-Local development logs are intentionally **not tracked**:
-
-- `temp/PROGRESS.md` — local-only phase status and command evidence.
-- `temp/DECISIONS.md` — local-only decision log.
-
-These files live under `temp/` and must never be committed to Git.
