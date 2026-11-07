@@ -1,4 +1,4 @@
-# 09 — Testing and Performance
+# 09 — Testing and Quality Gates
 
 Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
 
@@ -20,17 +20,23 @@ Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
      removed, file remains untracked; unstaged tracked → worktree restored from index; untracked →
      deleted; both → staged keeps the worktree, unstaged keeps the index; conflicts excluded.
 4. **Queries:** table tests for `parseQuery`/`resolve`; compare against equivalent `git rev-list`.
-5. **Sessions/tabs:** T1–T7 with `FakeGitBackend`/`FakeWatcher` and `kotlinx-coroutines-test`:
+5. **Branch filters:** pure tests for field matching, Any/All, strict date boundaries, and
+   nearest-branch mapping (divergence, merges, ties, current/local priority); real-git acceptance
+   for include/exclude by author, email, message, and date plus `LogSpec.excludeRevs`; session tests
+   for spec/labels/persistence/cancellation; UI tests for dialog CRUD, field selector, validation,
+   and screenshots.
+6. **Sessions/tabs:** T1–T7 with `FakeGitBackend`/`FakeWatcher` and `kotlinx-coroutines-test`:
    virtual time, late responses, cancellation, writes surviving tab switches.
-6. **Watcher:** temporary directories; branches, commits, checkout, `git gc` with `packed-refs`.
+7. **Watcher:** temporary directories; branches, commits, checkout, `git gc` with `packed-refs`.
    Tolerant waits (up to ~5 s); no event-order assumptions. Verify on macOS, then Linux, then
    Windows.
-7. **Push/pull:** local bare repo as `origin`: push, fast-forward pull, divergence error, missing
+8. **Push/pull:** local bare repo as `origin`: push, fast-forward pull, divergence error, missing
    upstream error.
-8. **UI smoke:** Compose Desktop test API with `FakeGitBackend`: graph appears, row selection shows
+9. **UI smoke:** Compose Desktop test API with `FakeGitBackend`: graph appears, row selection shows
    files, stage moves a file, discard updates sections, tab switch preserves state. Save PNGs to
    `build/screenshots/`; use `xvfb-run` on headless Linux.
-9. **Performance:** separate `bench` task on the 50k and 200k repos; not part of `check`.
+10. **Performance:** budgets, benchmark repositories, execution rules, and the optimization
+    backlog live in [13-performance.md](13-performance.md). `bench` is separate from `check`.
 
 ## Quality gates
 
@@ -43,35 +49,11 @@ Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
 - `core` imports no Compose, AWT, Swing, or `java.awt`.
 - Contract changes recorded in `temp/DECISIONS.md` (local-only; never tracked).
 
+Performance budgets, benchmarks, and execution rules: [13-performance.md](13-performance.md).
+
 ## Adversarial checklist
 
 Weird paths; empty repo; detached HEAD; thousands of branches; a commit with 100 parents;
 worktrees/submodules; Unicode/CRLF messages; closing a tab during a load; Git failing mid-command;
 watcher bursts; a 50 MB diff; discard on staged/unstaged/untracked files; discard of a staged new
 file; deleting an untracked file; permission errors.
-
-## Performance targets
-
-| Metric | Target |
-|---|---|
-| First visible rows | < 400 ms |
-| Full graph | < 3 s; overhead over raw `git log` ≤ 30% |
-| Layout throughput | ≥ 300,000 rows/s |
-| Graph memory | ≤ 400 bytes/commit |
-| Fast scroll | no frame > 16 ms attributable to our code |
-| Tab switch | < 50 ms to frozen snapshot |
-| Status refresh | dominated by `git status`; our overhead ≤ ~50 ms |
-
-- Parse/layout on `Dispatchers.Default`; I/O on `Dispatchers.IO`.
-- One writer per `LaneLayoutEngine`; UI reads immutable snapshots.
-- Diffs/details on demand, cancelable.
-- Recommend `git commit-graph` in the README; never run it automatically.
-- Measure before optimizing.
-
-## Test repositories
-
-- **50k in-memory DAG** (`SyntheticDagGenerator`): fast CI benchmark, seeded, ~20 authors, ~30
-  branches, merges, tags. Record the number; no fragile hard assertion.
-- **200k real repo** (QA): `git fast-import`, deterministic seed, ~15 authors, ~300 branches, a merge
-  every ~10 commits, ~100 tags, 5 years. Cache in `build/perf-repo/`; use for manual `bench` and
-  acceptance.

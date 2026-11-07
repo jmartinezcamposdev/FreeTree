@@ -34,8 +34,9 @@ workstream's tests green.
 **Phase 3 — Integration.** Real `CliGitBackend` and watcher; oracles; watcher integration; push/pull
 bare repo; manual real-repo flow. Gate: `./gradlew check` and the full flow works.
 
-**Phase 4 — Hardening.** Adversarial review, 200k benchmark, optimize only measured bottlenecks,
-package `Dmg`, `Deb`, `Msi` as applicable. Gate: budgets met or deviations logged.
+**Phase 4 — Hardening.** Adversarial review, measured performance work, packaging (`Dmg`, `Deb`,
+`Msi` as applicable). Gate: budgets met or deviations logged. The benchmark and optimization plan
+live in [13-performance.md](13-performance.md).
 
 ## Acceptance
 
@@ -44,7 +45,8 @@ package `Dmg`, `Deb`, `Msi` as applicable. Gate: budgets met or deviations logge
 - [ ] **R3** Staged/unstaged/conflicts; per-file stage/unstage incl. deletes, renames, unborn HEAD;
       multiline commit; state matches `git status`.
 - [ ] **R4** Push/pull work without prompts; full Git errors; no hung processes.
-- [ ] **R5** Manual ref hiding and query filtering; flat mode; syntax errors do not lose the view.
+- [ ] **R5** Manual ref hiding, query filtering, and branch filters with nearest-branch mapping;
+      flat mode; errors do not lose the view. See [12-filters.md](12-filters.md).
 - [ ] **R6** Performance budgets met or deviations documented.
 - [ ] **R7** Independent tab state; T1–T7 green; inactive tabs consume no CPU/process/watcher.
 - [ ] **R8** Runs on macOS, Linux, Windows in that priority; installer at least on macOS.
@@ -58,8 +60,6 @@ package `Dmg`, `Deb`, `Msi` as applicable. Gate: budgets met or deviations logge
 | Risk | Mitigation |
 |---|---|
 | Watcher misses events | Explicit refresh, focus refresh, polling fallback; never source of truth. |
-| 200k `--topo-order` slow | commit-graph advice; measure; optimize Git/layout first. |
-| Inactive snapshot memory | Retain for MVP; cap/LRU only if needed. |
 | First-parent extra lane | Accepted; post-MVP visual improvement. |
 | Huge diffs/untracked files | 2 MB cap, binary detection, opt-in full load. |
 | Platform differences | macOS first, then Linux/Windows; use `-z`, UTF-8, no shell. |
@@ -67,11 +67,15 @@ package `Dmg`, `Deb`, `Msi` as applicable. Gate: budgets met or deviations logge
 | Worktrees/submodules | Use `git rev-parse`; never assume `.git/` is a directory. |
 | Discard accidents | Separate staged/unstaged actions; confirm unstaged and state what is lost on disk. |
 
+Performance risks and mitigations: [13-performance.md](13-performance.md).
+
 ## Deferred
 
-LRU snapshots, joining an existing first-parent lane, dotted edges/re-parenting, `is:merge`,
-`branch:` alias, draggable panes, syntax highlighting, side-by-side diff, hunk staging, conflict
-resolution, branch/tag management.
+Joining an existing first-parent lane, dotted edges/re-parenting, `is:merge`, `branch:` alias,
+draggable panes, syntax highlighting, side-by-side diff, hunk staging, conflict resolution,
+branch/tag management. Commit-level filtering is planned in [12-filters.md](12-filters.md);
+performance items (LRU snapshots, fast filter scan, nearest-branch cache) are in
+[13-performance.md](13-performance.md).
 
 ## Tracking templates
 

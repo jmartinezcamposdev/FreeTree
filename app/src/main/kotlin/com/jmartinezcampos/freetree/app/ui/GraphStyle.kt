@@ -26,12 +26,16 @@ data class GraphColors(
     val error: Color,
     val errorContainer: Color,
     val onErrorContainer: Color,
+    val destructive: Color,
+    val onDestructive: Color,
     val lanePalette: List<Color>,
     val nodeBorder: Color,
     val headHalo: Color,
     val arrow: Color,
     val chipLocalBackground: Color,
     val chipLocalForeground: Color,
+    val chipCurrentBranchBackground: Color,
+    val chipCurrentBranchForeground: Color,
     val chipRemoteBackground: Color,
     val chipRemoteForeground: Color,
     val chipTagBackground: Color,
@@ -55,12 +59,12 @@ data class GraphColors(
 
 object GraphStyle {
     val ROW_HEIGHT: Dp = 28.dp
+    val CHANGES_ROW_HEIGHT: Dp = 48.dp
+    val COMFORTABLE_ROW_HEIGHT: Dp = 48.dp
     val LANE_WIDTH: Dp = 16.dp
     val NODE_RADIUS: Dp = 4.dp
     val STROKE_WIDTH: Dp = 1.5.dp
     const val MAX_VISIBLE_LANES: Int = 16
-    val ARROW_SIZE: Dp = 6.dp
-    const val ARROW_TOWARD_PARENT: Boolean = true
     const val CENTER_FACTOR: Float = 2f
     const val CURVE_CONTROL_FRACTION: Float = 0.5f
     const val HEAD_HALO_RADIUS_FACTOR: Float = 2f
@@ -79,19 +83,53 @@ object GraphStyle {
 
     val WINDOW_WIDTH: Dp = 1180.dp
     val WINDOW_HEIGHT: Dp = 760.dp
+    val WINDOW_MIN_WIDTH: Dp = 720.dp
+    val WINDOW_MIN_HEIGHT: Dp = 480.dp
+    val ABOUT_DIALOG_WIDTH: Dp = 420.dp
+    val ABOUT_DIALOG_HEIGHT: Dp = 320.dp
+    val ABOUT_ICON_SIZE: Dp = 96.dp
+    val ABOUT_CONTENT_MARGIN: Dp = 16.dp
+    val ABOUT_TITLE_SIZE = 20.sp
+    val ABOUT_TITLE_LINE_HEIGHT = 24.sp
+    val MESSAGES_WINDOW_WIDTH: Dp = 980.dp
+    val MESSAGES_WINDOW_HEIGHT: Dp = 560.dp
+    val PREFERENCES_WINDOW_WIDTH: Dp = 680.dp
+    val PREFERENCES_WINDOW_HEIGHT: Dp = 460.dp
+    val PREFERENCES_NAV_WIDTH: Dp = 190.dp
+    val PREFERENCES_CONTENT_PADDING: Dp = 28.dp
+    val PREFERENCES_NAV_ITEM_HEIGHT: Dp = 30.dp
+    val PREFERENCES_NAV_CORNER_RADIUS: Dp = 8.dp
+    val PREFERENCES_OPTION_HEIGHT: Dp = 30.dp
+    val PREFERENCES_TOGGLE_SIZE: Dp = 16.dp
+    val PREFERENCES_TOGGLE_CORNER_RADIUS: Dp = 4.dp
+    val LOG_TIMESTAMP_WIDTH: Dp = 64.dp
+    val LOG_LEVEL_WIDTH: Dp = 44.dp
+    val LOG_REPO_WIDTH: Dp = 150.dp
+    val COMPACT_ACTION_CORNER_RADIUS: Dp = 6.dp
+    val COMPACT_ACTION_SIZE: Dp = 20.dp
+    val LOG_ICON_SIZE: Dp = 11.dp
+    val LOG_ICON_STROKE: Dp = 1.2.dp
+    val THEME_OPTION_CORNER_RADIUS: Dp = 6.dp
 
     val SPACE_XXS: Dp = 2.dp
     val SPACE_XS: Dp = 4.dp
     val SPACE_SM: Dp = 6.dp
     val SPACE_MD: Dp = 8.dp
+    val SPACE_ML: Dp = 10.dp
     val SPACE_LG: Dp = 12.dp
     val SPACE_XL: Dp = 16.dp
 
-    val TAB_BAR_HEIGHT: Dp = 32.dp
-    val TAB_HEIGHT: Dp = 24.dp
+    val TAB_BAR_HEIGHT: Dp = 34.dp
+    val TAB_HEIGHT: Dp = 26.dp
     val TAB_CLOSE_SIZE: Dp = 16.dp
+    val TAB_CLOSE_ICON_SIZE: Dp = 8.dp
+    val TAB_CLOSE_ICON_STROKE: Dp = 1.3.dp
     val TAB_CORNER_RADIUS: Dp = 6.dp
     val TAB_BAR_START_PADDING: Dp = 4.dp
+    val TAB_HORIZONTAL_PADDING: Dp = 10.dp
+    val TAB_TITLE_WIDTH: Dp = 112.dp
+    val TAB_TEXT_SIZE = 12.sp
+    val TAB_TEXT_LINE_HEIGHT = 16.sp
     val NEW_TAB_SIZE: Dp = 22.dp
     val NEW_TAB_CORNER_RADIUS: Dp = 6.dp
     val NEW_TAB_ICON_SIZE: Dp = 10.dp
@@ -107,8 +145,55 @@ object GraphStyle {
     const val SCROLLBAR_HIDE_DELAY_MILLIS: Long = 900L
     const val SCROLLBAR_FADE_MILLIS: Int = 160
     val TOOLBAR_HEIGHT: Dp = 36.dp
+    val TOOLBAR_HORIZONTAL_PADDING: Dp = 12.dp
+    val TOOLBAR_BUTTON_GAP: Dp = 8.dp
+    val TOOLBAR_STATUS_GAP: Dp = 12.dp
+    val TOOLBAR_BUTTON_CORNER_RADIUS: Dp = 8.dp
+    val TOOLBAR_ICON_SIZE: Dp = 12.dp
+    val TOOLBAR_ICON_STROKE: Dp = 1.4.dp
+    val TOOLBAR_BRANCH_MAX_WIDTH: Dp = 280.dp
+    val CONTEXT_MENU_ITEM_HEIGHT: Dp = 28.dp
+    val DIALOG_WIDTH: Dp = 440.dp
+    val DIALOG_HORIZONTAL_PADDING: Dp = 24.dp
+    val DIALOG_VERTICAL_PADDING: Dp = 22.dp
+    val DIALOG_HEADER_BOTTOM_SPACE: Dp = 8.dp
+    val DIALOG_SECTION_GAP: Dp = 14.dp
+    val DIALOG_FIELD_LABEL_GAP: Dp = 6.dp
+    val DIALOG_ACTIONS_TOP_SPACE: Dp = 22.dp
+    val DIALOG_BUTTON_HEIGHT: Dp = 32.dp
+    val DIALOG_BUTTON_MIN_WIDTH: Dp = 80.dp
+    val DIALOG_CORNER_RADIUS: Dp = 10.dp
+    val DIALOG_CONTROL_CORNER_RADIUS: Dp = 6.dp
+    val DIALOG_INPUT_HEIGHT: Dp = 34.dp
+    val DIALOG_WARNING_BAR_WIDTH: Dp = 3.dp
+    val DIALOG_CLOSE_SIZE: Dp = 24.dp
+    val DIALOG_CLOSE_ICON_SIZE: Dp = 10.dp
+    val BRANCH_PICKER_WIDTH: Dp = 680.dp
+    val BRANCH_PICKER_MAX_HEIGHT: Dp = 720.dp
+    const val BRANCH_PICKER_WIDTH_FRACTION: Float = 0.72f
+    const val BRANCH_PICKER_HEIGHT_FRACTION: Float = 0.86f
+    val BRANCH_PICKER_ROW_HEIGHT: Dp = 36.dp
+    val BRANCH_PICKER_ICON_SIZE: Dp = 14.dp
+    val FILTERS_DIALOG_WIDTH: Dp = 1040.dp
+    val FILTERS_DIALOG_MAX_HEIGHT: Dp = 760.dp
+    const val FILTERS_DIALOG_WIDTH_FRACTION: Float = 0.82f
+    const val FILTERS_DIALOG_HEIGHT_FRACTION: Float = 0.82f
+    val FILTERS_CARD_GAP: Dp = 12.dp
+    val FILTERS_STACK_BREAKPOINT: Dp = 760.dp
+    val FILTERS_CARD_CORNER_RADIUS: Dp = 8.dp
+    val FILTERS_RULE_GAP: Dp = 6.dp
+    val FILTERS_RULE_MIN_HEIGHT: Dp = 34.dp
+    val FILTERS_INPUT_HEIGHT: Dp = 26.dp
+    val FILTERS_FIELD_WIDTH: Dp = 92.dp
+    val FILTERS_ACCENT_WIDTH: Dp = 3.dp
+    val DIALOG_CLOSE_ICON_STROKE: Dp = 1.5.dp
+    val DIALOG_TITLE_SIZE = 15.sp
+    val DIALOG_TITLE_LINE_HEIGHT = 20.sp
+    val DIALOG_BODY_SIZE = 13.sp
+    val DIALOG_BODY_LINE_HEIGHT = 19.sp
     val DIVIDER_THICKNESS: Dp = 1.dp
     val CONTROL_HEIGHT: Dp = 28.dp
+    val CHANGE_SECTION_ACTION_HEIGHT: Dp = 24.dp
     val BUSY_INDICATOR_SIZE: Dp = 16.dp
     val PROGRESS_HEIGHT: Dp = 3.dp
     val REFS_PANEL_MAX_HEIGHT: Dp = 220.dp
@@ -123,19 +208,33 @@ object GraphStyle {
     const val CHIP_MAX: Int = 3
 
     val GRAPH_PANE_WEIGHT: Float = 0.62f
-    val DETAIL_PANE_WEIGHT: Float = 0.38f
     const val FILL_WEIGHT: Float = 1f
+
+    val SPLITTER_HIT_WIDTH: Dp = 10.dp
+    val SPLITTER_HIT_HEIGHT: Dp = 10.dp
+    val MIN_GRAPH_PANE_WIDTH: Dp = 320.dp
+    val MIN_DETAIL_PANE_WIDTH: Dp = 320.dp
+    val MIN_FILES_PANE_HEIGHT: Dp = 100.dp
+    val MIN_DIFF_PANE_HEIGHT: Dp = 120.dp
+    val WORKING_TREE_DASH_ON: Dp = 4.dp
+    val WORKING_TREE_DASH_OFF: Dp = 3.dp
+    val WORKING_TREE_BALL_GAP: Dp = 2.dp
+    const val COMMIT_FILES_FRACTION: Float = 0.5f
+    const val CHANGES_FILES_FRACTION: Float = 0.5f
 
     const val PAGE_ROWS: Int = 10
     const val QUERY_DEBOUNCE_MILLIS: Long = 300L
     const val HASH_ABBREVIATION: Int = 8
     const val MESSAGE_MIN_LINES: Int = 3
     const val MESSAGE_MAX_LINES: Int = 6
+    val MESSAGE_DISMISS_CORNER_RADIUS: Dp = 10.dp
+    val COMMIT_PLACEHOLDER_OFFSET_X: Dp = 0.dp
+    val COMMIT_PLACEHOLDER_OFFSET_Y: Dp = 0.dp
     const val TOOLTIP_DELAY_MILLIS: Int = 300
     const val MAX_TEXT_LINES: Int = 1
     const val MAX_DIFF_LINE_CHARS: Int = 2_000
 
-    val DATE_PATTERN: String = "yyyy-MM-dd HH:mm"
+    const val DATE_PATTERN: String = "yyyy-MM-dd HH:mm"
 
     val typography: Typography = Typography(
         bodyMedium = TextStyle(fontSize = BODY_SIZE, lineHeight = BODY_LINE_HEIGHT),
@@ -164,11 +263,13 @@ object GraphStyle {
         primary = Color(0xFF6FA8FF),
         onPrimary = Color(0xFF0B1220),
         divider = Color(0xFF333A44),
-        selectedRow = Color(0xFF2D3E55),
+        selectedRow = Color(0xFF2A3038),
         hoverRow = Color(0xFF252B34),
-        error = Color(0xFFFF8B84),
+        error = Color(0xFFFF6B6B),
         errorContainer = Color(0xFF4A2222),
         onErrorContainer = Color(0xFFFFD5D1),
+        destructive = Color(0xFFE5484D),
+        onDestructive = Color(0xFFFFFFFF),
         lanePalette = listOf(
             Color(0xFF64B5F6),
             Color(0xFF81C784),
@@ -184,12 +285,14 @@ object GraphStyle {
         arrow = Color(0xFFB0BEC5),
         chipLocalBackground = Color(0xFF244A36),
         chipLocalForeground = Color(0xFFB9F6CA),
+        chipCurrentBranchBackground = Color(0xFF2F6FD0),
+        chipCurrentBranchForeground = Color.White,
         chipRemoteBackground = Color(0xFF243A55),
         chipRemoteForeground = Color(0xFFBBDEFB),
         chipTagBackground = Color(0xFF4A3A1C),
         chipTagForeground = Color(0xFFFFE0A3),
-        chipHeadBackground = Color(0xFF5A4A12),
-        chipHeadForeground = Color(0xFFFFF3C4),
+        chipHeadBackground = Color(0xFFB8860B),
+        chipHeadForeground = Color.White,
         diffAddBackground = Color(0xFF1E3A24),
         diffDelBackground = Color(0xFF422326),
         diffHunkBackground = Color(0xFF233247),
@@ -214,11 +317,13 @@ object GraphStyle {
         primary = Color(0xFF1F5FBF),
         onPrimary = Color(0xFFFFFFFF),
         divider = Color(0xFFD5DAE1),
-        selectedRow = Color(0xFFDCE8FA),
+        selectedRow = Color(0xFFE6EAEF),
         hoverRow = Color(0xFFEEF1F5),
-        error = Color(0xFFB3261E),
+        error = Color(0xFFC92A2A),
         errorContainer = Color(0xFFF9DEDC),
         onErrorContainer = Color(0xFF410E0B),
+        destructive = Color(0xFFD1242F),
+        onDestructive = Color(0xFFFFFFFF),
         lanePalette = listOf(
             Color(0xFF1565C0),
             Color(0xFF2E7D32),
@@ -234,12 +339,14 @@ object GraphStyle {
         arrow = Color(0xFF546E7A),
         chipLocalBackground = Color(0xFFD9F2DF),
         chipLocalForeground = Color(0xFF1B5E20),
+        chipCurrentBranchBackground = Color(0xFF1F5FBF),
+        chipCurrentBranchForeground = Color.White,
         chipRemoteBackground = Color(0xFFDCEBFA),
         chipRemoteForeground = Color(0xFF0D47A1),
         chipTagBackground = Color(0xFFFFF0C9),
         chipTagForeground = Color(0xFF6D4C00),
-        chipHeadBackground = Color(0xFFFFE8A3),
-        chipHeadForeground = Color(0xFF4A3A00),
+        chipHeadBackground = Color(0xFFB8860B),
+        chipHeadForeground = Color.White,
         diffAddBackground = Color(0xFFE3F6E5),
         diffDelBackground = Color(0xFFFBE4E4),
         diffHunkBackground = Color(0xFFE3ECF8),

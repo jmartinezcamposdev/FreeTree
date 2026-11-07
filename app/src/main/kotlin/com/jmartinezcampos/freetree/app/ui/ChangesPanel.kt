@@ -4,30 +4,39 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.jmartinezcampos.freetree.core.model.DiffTarget
 import com.jmartinezcampos.freetree.core.model.StatusEntry
 import com.jmartinezcampos.freetree.core.model.StatusKind
@@ -40,6 +49,180 @@ internal fun ChangesPanel(
     state: RepoUiState,
     session: RepoSession?,
     loadFullDiff: (RepoSession, DiffTarget) -> Unit,
+    settingsController: AppSettingsController,
+    onDiscardRequest: (StatusEntry) -> Unit,
+    onDiscardAllRequest: (List<String>) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val colors = LocalGraphColors.current
+    val status = state.status
+    val staged = status?.entries.orEmpty().filter {
+        it.kind != StatusKind.UNMERGED && it.index != '?' && !isStatusBlank(it.index)
+    }
+    val conflicts = status?.entries.orEmpty().filter { it.kind == StatusKind.UNMERGED }
+    var message by remember(session?.id) { mutableStateOf("") }
+    val changesScrollState = rememberScrollState()
+    var filesFraction by remember {
+        mutableFloatStateOf(settingsController.state.value.changesFilesFraction)
+    }
+    val latestFilesFraction = rememberUpdatedState(filesFraction)
+    DisposableEffect(settingsController) {
+        onDispose { settingsController.setChangesFilesFraction(latestFilesFraction.value) }
+    }
+    val busy = state.busy != null
+    val canCommit = message.isNotBlank() && staged.isNotEmpty() && conflicts.isEmpty() && !busy && session != null
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(colors.surface)
+            .testTag(UiTestTags.CHANGES_PANEL),
+    ) {
+        val target = state.openDiffTarget
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(GraphStyle.FILL_WEIGHT),
+        ) {
+            val density = LocalDensity.current
+            val contentHeightPx = with(density) {
+                (maxHeight - GraphStyle.SPLITTER_HIT_HEIGHT).toPx()
+            }
+            val minFilesPx = with(density) { GraphStyle.MIN_FILES_PANE_HEIGHT.toPx() }
+            val minDiffPx = with(density) { GraphStyle.MIN_DIFF_PANE_HEIGHT.toPx() }
+            LaunchedEffect(contentHeightPx) {
+                filesFraction = resizePaneFraction(
+                    current = filesFraction,
+                    deltaPx = 0f,
+                    contentWidthPx = contentHeightPx,
+                    minLeftPx = minFilesPx,
+                    minRightPx = minDiffPx,
+                )
+            }
+
+            if (target is DiffTarget.Staged || target is DiffTarget.Unstaged) {
+                Column(Modifier.fillMaxSize()) {
+                    ChangesFileList(
+                        state = state,
+                        session = session,
+                        scrollState = changesScrollState,
+                        busy = busy,
+                        onPendingDiscard = onDiscardRequest,
+                        onDiscardAllRequest = onDiscardAllRequest,
+                        modifier = Modifier.weight(filesFraction),
+                    )
+                    HorizontalSplitter(
+                        onDrag = { delta ->
+                            filesFraction = resizePaneFraction(
+                                current = filesFraction,
+                                deltaPx = delta,
+                                contentWidthPx = contentHeightPx,
+                                minLeftPx = minFilesPx,
+                                minRightPx = minDiffPx,
+                            )
+                        },
+                        onDragStopped = {
+                            settingsController.setChangesFilesFraction(filesFraction)
+                        },
+                        testTag = UiTestTags.CHANGES_SPLITTER,
+                    )
+                    val error = state.message as? UserMessage.Error
+                    DiffView(
+                        diff = state.openDiff,
+                        loading = state.openDiff == null && error == null,
+                        error = if (state.openDiff == null) error else null,
+                        onLoadFull = { session?.let { loadFullDiff(it, target) } },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f - filesFraction),
+                    )
+                }
+            } else {
+                ChangesFileList(
+                    state = state,
+                    session = session,
+                    scrollState = changesScrollState,
+                    busy = busy,
+                    onPendingDiscard = onDiscardRequest,
+                    onDiscardAllRequest = onDiscardAllRequest,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(colors.surfaceRaised)
+                .padding(
+                    start = GraphStyle.SPACE_XS,
+                    top = GraphStyle.SPACE_XXS,
+                    end = GraphStyle.SPACE_SM,
+                    bottom = GraphStyle.SPACE_XXS,
+                ),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_SM),
+        ) {
+            BasicTextField(
+                value = message,
+                onValueChange = { message = it },
+                textStyle = MaterialTheme.typography.bodyMedium.copy(color = colors.onSurface),
+                minLines = GraphStyle.MESSAGE_MIN_LINES,
+                maxLines = GraphStyle.MESSAGE_MAX_LINES,
+                enabled = session != null && !busy,
+                cursorBrush = SolidColor(colors.primary),
+                modifier = Modifier
+                    .weight(GraphStyle.FILL_WEIGHT)
+                    .padding(
+                        start = GraphStyle.SPACE_XL,
+                        top = GraphStyle.SPACE_XL,
+                        end = GraphStyle.SPACE_XL,
+                        bottom = GraphStyle.SPACE_XL,
+                    )
+                    .testTag(UiTestTags.COMMIT_MESSAGE),
+                decorationBox = { innerTextField ->
+                    Box {
+                        if (message.isEmpty()) {
+                            Text(
+                                text = "Commit message",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.onSurfaceMuted,
+                                modifier = Modifier.offset(
+                                    x = GraphStyle.COMMIT_PLACEHOLDER_OFFSET_X,
+                                    y = GraphStyle.COMMIT_PLACEHOLDER_OFFSET_Y,
+                                ),
+                            )
+                        }
+                        innerTextField()
+                    }
+                },
+            )
+            Button(
+                onClick = {
+                    session?.commit(message)
+                    message = ""
+                },
+                enabled = canCommit,
+                modifier = Modifier
+                    .padding(top = GraphStyle.SPACE_LG, end = GraphStyle.SPACE_MD)
+                    .height(GraphStyle.CONTROL_HEIGHT)
+                    .testTag(UiTestTags.COMMIT_BUTTON),
+            ) {
+                Text("Commit", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+    }
+
+}
+
+@Composable
+private fun ChangesFileList(
+    state: RepoUiState,
+    session: RepoSession?,
+    scrollState: androidx.compose.foundation.ScrollState,
+    busy: Boolean,
+    onPendingDiscard: (StatusEntry) -> Unit,
+    onDiscardAllRequest: (List<String>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
@@ -53,222 +236,169 @@ internal fun ChangesPanel(
         it.kind != StatusKind.UNMERGED &&
             (it.kind == StatusKind.UNTRACKED || !isStatusBlank(it.worktree))
     }
-    var message by remember(session?.id) { mutableStateOf("") }
-    // Keyed by session too: switching tabs must not leave a confirmation for another repository.
-    var pendingDiscard by remember(session?.id) { mutableStateOf<StatusEntry?>(null) }
-    val changesScrollState = rememberScrollState()
-    val busy = state.busy != null
-    val canCommit = message.isNotBlank() && staged.isNotEmpty() && conflicts.isEmpty() && !busy && session != null
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(colors.surface)
-            .testTag(UiTestTags.CHANGES_PANEL),
-    ) {
-        Box(
+    Box(modifier) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(GraphStyle.FILL_WEIGHT),
+                .fillMaxSize()
+                .padding(end = GraphStyle.SCROLLBAR_GUTTER)
+                .verticalScroll(scrollState),
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(end = GraphStyle.SCROLLBAR_GUTTER)
-                    .verticalScroll(changesScrollState),
-            ) {
-                if (status == null) {
-                    Text(
-                        text = "Loading working tree…",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceMuted,
-                        modifier = Modifier.padding(GraphStyle.SPACE_LG),
-                    )
-                } else if (entries.isEmpty()) {
-                    Text(
-                        text = "Working tree clean",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceMuted,
-                        modifier = Modifier.padding(GraphStyle.SPACE_LG),
+            if (status == null) {
+                Text(
+                    text = "Loading working tree…",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceMuted,
+                    modifier = Modifier.padding(GraphStyle.SPACE_LG),
+                )
+            } else if (entries.isEmpty()) {
+                Text(
+                    text = "Working tree clean",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceMuted,
+                    modifier = Modifier.padding(GraphStyle.SPACE_LG),
+                )
+            }
+
+            if (conflicts.isNotEmpty()) {
+                ChangeSectionHeader(title = "Conflicts", count = conflicts.size, tag = UiTestTags.CONFLICTS_SECTION)
+                Text(
+                    text = "Resolve conflicts outside FreeTree. Conflict actions are disabled.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.error,
+                    modifier = Modifier.padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XS),
+                )
+                conflicts.forEach { entry ->
+                    ChangeFileRow(
+                        entry = entry,
+                        status = entry.index,
+                        tag = UiTestTags.conflictFile(entry.path),
+                        readOnly = true,
+                        onOpen = { session?.openDiff(DiffTarget.Unstaged(entry.path)) },
                     )
                 }
+            }
 
-                if (conflicts.isNotEmpty()) {
-                    ChangeSectionHeader(title = "Conflicts", count = conflicts.size, tag = UiTestTags.CONFLICTS_SECTION)
-                    Text(
-                        text = "Resolve conflicts outside FreeTree. Conflict actions are disabled.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.error,
-                        modifier = Modifier.padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XS),
-                    )
-                    conflicts.forEach { entry ->
-                        ChangeFileRow(
-                            entry = entry,
-                            status = entry.index,
-                            tag = UiTestTags.conflictFile(entry.path),
-                            readOnly = true,
-                            onOpen = { session?.openDiff(DiffTarget.Unstaged(entry.path)) },
-                        )
-                    }
-                }
-
-                if (staged.isNotEmpty()) {
-                    ChangeSectionHeader(
-                        title = "Staged",
-                        count = staged.size,
-                        tag = UiTestTags.STAGED_SECTION,
-                        action = {
+            if (staged.isNotEmpty()) {
+                ChangeSectionHeader(
+                    title = "Staged",
+                    count = staged.size,
+                    tag = UiTestTags.STAGED_SECTION,
+                    action = {
+                        TextButton(
+                            onClick = { session?.unstage(staged.map { it.path }) },
+                            enabled = !busy,
+                            contentPadding = PaddingValues(
+                                horizontal = GraphStyle.SPACE_SM,
+                                vertical = 0.dp,
+                            ),
+                            modifier = Modifier
+                                .height(GraphStyle.CHANGE_SECTION_ACTION_HEIGHT)
+                                .testTag(UiTestTags.UNSTAGE_ALL),
+                        ) {
+                            Text("Unstage all", style = MaterialTheme.typography.bodySmall)
+                        }
+                    },
+                )
+                staged.forEach { entry ->
+                    ChangeFileRow(
+                        entry = entry,
+                        status = entry.index,
+                        tag = UiTestTags.stagedFile(entry.path),
+                        onOpen = { session?.openDiff(DiffTarget.Staged(entry.path)) },
+                        actions = {
                             TextButton(
-                                onClick = { session?.unstage(staged.map { it.path }) },
+                                onClick = { session?.discardStaged(listOf(entry.path)) },
                                 enabled = !busy,
-                                modifier = Modifier.testTag(UiTestTags.UNSTAGE_ALL),
+                                modifier = Modifier
+                                    .height(GraphStyle.CONTROL_HEIGHT)
+                                    .testTag(UiTestTags.discardStaged(entry.path)),
                             ) {
-                                Text("Unstage all", style = MaterialTheme.typography.bodySmall)
+                                Text("Discard staged", style = MaterialTheme.typography.bodySmall)
                             }
                         },
                     )
-                    staged.forEach { entry ->
-                        ChangeFileRow(
-                            entry = entry,
-                            status = entry.index,
-                            tag = UiTestTags.stagedFile(entry.path),
-                            onOpen = { session?.openDiff(DiffTarget.Staged(entry.path)) },
-                            actions = {
-                                TextButton(
-                                    onClick = { session?.discardStaged(listOf(entry.path)) },
-                                    enabled = !busy,
-                                    modifier = Modifier
-                                        .height(GraphStyle.CONTROL_HEIGHT)
-                                        .testTag(UiTestTags.discardStaged(entry.path)),
-                                ) {
-                                    Text("Discard staged", style = MaterialTheme.typography.bodySmall)
-                                }
-                            },
-                        )
-                    }
                 }
+            }
 
-                if (unstaged.isNotEmpty()) {
-                    ChangeSectionHeader(
-                        title = "Unstaged",
-                        count = unstaged.size,
-                        tag = UiTestTags.UNSTAGED_SECTION,
-                        action = {
+            if (unstaged.isNotEmpty()) {
+                ChangeSectionHeader(
+                    title = "Unstaged",
+                    count = unstaged.size,
+                    tag = UiTestTags.UNSTAGED_SECTION,
+                    action = {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            TextButton(
+                                onClick = { onDiscardAllRequest(unstaged.map { it.path }) },
+                                enabled = !busy,
+                                contentPadding = PaddingValues(
+                                    horizontal = GraphStyle.SPACE_SM,
+                                    vertical = 0.dp,
+                                ),
+                                modifier = Modifier
+                                    .height(GraphStyle.CHANGE_SECTION_ACTION_HEIGHT)
+                                    .testTag(UiTestTags.DISCARD_ALL_CHANGES),
+                            ) {
+                                Text(
+                                    text = "Discard all",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = colors.error,
+                                )
+                            }
                             TextButton(
                                 onClick = { session?.stage(unstaged.map { it.path }) },
                                 enabled = !busy,
-                                modifier = Modifier.testTag(UiTestTags.STAGE_ALL),
+                                contentPadding = PaddingValues(
+                                    horizontal = GraphStyle.SPACE_SM,
+                                    vertical = 0.dp,
+                                ),
+                                modifier = Modifier
+                                    .height(GraphStyle.CHANGE_SECTION_ACTION_HEIGHT)
+                                    .testTag(UiTestTags.STAGE_ALL),
                             ) {
                                 Text("Stage all", style = MaterialTheme.typography.bodySmall)
                             }
+                        }
+                    },
+                )
+                unstaged.forEach { entry ->
+                    ChangeFileRow(
+                        entry = entry,
+                        status = if (entry.kind == StatusKind.UNTRACKED) '?' else entry.worktree,
+                        tag = UiTestTags.unstagedFile(entry.path),
+                        onOpen = { session?.openDiff(DiffTarget.Unstaged(entry.path)) },
+                        actions = {
+                            TextButton(
+                                onClick = { session?.stage(listOf(entry.path)) },
+                                enabled = !busy,
+                                modifier = Modifier
+                                    .height(GraphStyle.CONTROL_HEIGHT)
+                                    .testTag(UiTestTags.stageFile(entry.path)),
+                            ) {
+                                Text("Stage", style = MaterialTheme.typography.bodySmall)
+                            }
+                            TextButton(
+                                onClick = { onPendingDiscard(entry) },
+                                enabled = !busy,
+                                modifier = Modifier
+                                    .height(GraphStyle.CONTROL_HEIGHT)
+                                    .testTag(UiTestTags.discardUnstaged(entry.path)),
+                            ) {
+                                Text("Discard unstaged changes", style = MaterialTheme.typography.bodySmall)
+                            }
                         },
                     )
-                    unstaged.forEach { entry ->
-                        ChangeFileRow(
-                            entry = entry,
-                            status = if (entry.kind == StatusKind.UNTRACKED) '?' else entry.worktree,
-                            tag = UiTestTags.unstagedFile(entry.path),
-                            onOpen = { session?.openDiff(DiffTarget.Unstaged(entry.path)) },
-                            actions = {
-                                TextButton(
-                                    onClick = { session?.stage(listOf(entry.path)) },
-                                    enabled = !busy,
-                                    modifier = Modifier
-                                        .height(GraphStyle.CONTROL_HEIGHT)
-                                        .testTag(UiTestTags.stageFile(entry.path)),
-                                ) {
-                                    Text("Stage", style = MaterialTheme.typography.bodySmall)
-                                }
-                                TextButton(
-                                    onClick = { pendingDiscard = entry },
-                                    enabled = !busy,
-                                    modifier = Modifier
-                                        .height(GraphStyle.CONTROL_HEIGHT)
-                                        .testTag(UiTestTags.discardUnstaged(entry.path)),
-                                ) {
-                                    Text("Discard unstaged changes", style = MaterialTheme.typography.bodySmall)
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-            ModernScrollbar(
-                scrollState = changesScrollState,
-                modifier = Modifier.align(Alignment.CenterEnd),
-                alwaysVisible = false,
-                testTag = UiTestTags.CHANGES_SCROLLBAR,
-            )
-        }
-
-        val target = state.openDiffTarget
-        if (target is DiffTarget.Staged || target is DiffTarget.Unstaged) {
-            val error = state.message as? UserMessage.Error
-            DiffView(
-                diff = state.openDiff,
-                loading = state.openDiff == null && error == null,
-                error = if (state.openDiff == null) error else null,
-                onLoadFull = { session?.let { loadFullDiff(it, target) } },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(GraphStyle.FILL_WEIGHT),
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(colors.surfaceRaised)
-                .padding(GraphStyle.SPACE_MD),
-            verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XS),
-        ) {
-            OutlinedTextField(
-                value = message,
-                onValueChange = { message = it },
-                textStyle = MaterialTheme.typography.bodyMedium,
-                placeholder = {
-                    Text(
-                        text = "Commit message",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurfaceMuted,
-                    )
-                },
-                minLines = GraphStyle.MESSAGE_MIN_LINES,
-                maxLines = GraphStyle.MESSAGE_MAX_LINES,
-                enabled = session != null && !busy,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag(UiTestTags.COMMIT_MESSAGE),
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                Button(
-                    onClick = {
-                        session?.commit(message)
-                        message = ""
-                    },
-                    enabled = canCommit,
-                    modifier = Modifier
-                        .height(GraphStyle.CONTROL_HEIGHT)
-                        .testTag(UiTestTags.COMMIT_BUTTON),
-                ) {
-                    Text("Commit", style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
-    }
-
-    val discard = pendingDiscard
-    if (discard != null) {
-        DiscardDialog(
-            entry = discard,
-            onDismiss = { pendingDiscard = null },
-            onConfirm = {
-                session?.discardUnstaged(listOf(discard.path))
-                pendingDiscard = null
-            },
+        ModernScrollbar(
+            scrollState = scrollState,
+            modifier = Modifier.align(Alignment.CenterEnd),
+            alwaysVisible = false,
+            testTag = UiTestTags.CHANGES_SCROLLBAR,
         )
     }
 }
@@ -284,9 +414,10 @@ private fun ChangeSectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .height(GraphStyle.CONTROL_HEIGHT)
             .background(colors.surfaceRaised)
             .testTag(tag)
-            .padding(horizontal = GraphStyle.SPACE_LG, vertical = GraphStyle.SPACE_XXS),
+            .padding(horizontal = GraphStyle.SPACE_LG),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -343,40 +474,4 @@ private fun ChangeFileRow(
             actions?.invoke()
         }
     }
-}
-
-@Composable
-private fun DiscardDialog(
-    entry: StatusEntry,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    val warning = if (entry.kind == StatusKind.UNTRACKED) {
-        "This permanently deletes \"${entry.path}\" from disk. This cannot be undone."
-    } else {
-        "This restores \"${entry.path}\" from the index and permanently discards its unstaged " +
-            "changes on disk. The staged content is kept. This cannot be undone."
-    }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        modifier = Modifier.testTag(UiTestTags.DISCARD_DIALOG),
-        title = { Text("Discard unstaged changes?") },
-        text = { Text(warning) },
-        confirmButton = {
-            TextButton(
-                onClick = onConfirm,
-                modifier = Modifier.testTag(UiTestTags.DISCARD_CONFIRM),
-            ) {
-                Text("Discard changes")
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                modifier = Modifier.testTag(UiTestTags.DISCARD_CANCEL),
-            ) {
-                Text("Cancel")
-            }
-        },
-    )
 }

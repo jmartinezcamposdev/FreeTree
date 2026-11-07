@@ -65,7 +65,11 @@ class CliGitBackend private constructor(
             args += it
         }
 
-        val stdin = (distinctRevs.joinToString("\n") + "\n").toByteArray(StandardCharsets.UTF_8)
+        val stdinLines = buildList {
+            addAll(distinctRevs)
+            spec.excludeRevs.distinct().forEach { add("^$it") }
+        }
+        val stdin = (stdinLines.joinToString("\n") + "\n").toByteArray(StandardCharsets.UTF_8)
         val result = runner.streamRecords(args, stdin = stdin) { record ->
             GitParsers.parseLogRecord(record)?.let { send(it) }
         }
@@ -237,13 +241,95 @@ class CliGitBackend private constructor(
         )
     }
 
-    override suspend fun push(): GitResult = runWrite(listOf("push"), GitCommandType.NETWORK)
+    override suspend fun push(): GitResult {
+        val branch = currentBranch()
+        if (branch != null && upstreamBranch() == null) {
+            return runWrite(
+                listOf("push", "--set-upstream", "origin", branch),
+                GitCommandType.NETWORK,
+            )
+        }
+        return runWrite(listOf("push"), GitCommandType.NETWORK)
+    }
+
+    private suspend fun currentBranch(): String? {
+        val result = runner.run(listOf("symbolic-ref", "-q", "--short", "HEAD"))
+        return when {
+            result.succeeded -> result.stdoutText().trim().ifBlank { null }
+            result.exitCode == 1 -> null
+            else -> throw GitException(result.exitCode, result.stderr)
+        }
+    }
+
+    private suspend fun upstreamBranch(): String? {
+        val result = runner.run(
+            listOf("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"),
+        )
+        return when {
+            result.succeeded -> result.stdoutText().trim().ifBlank { null }
+            result.exitCode == 1 || result.exitCode == 128 -> null
+            else -> throw GitException(result.exitCode, result.stderr)
+        }
+    }
 
     override suspend fun pull(): GitResult = runWrite(
         listOf("pull", "--no-edit"),
         GitCommandType.NETWORK,
         environment = mapOf("GIT_MERGE_AUTOEDIT" to "no", "GIT_EDITOR" to "true"),
     )
+
+    override suspend fun checkoutLocal(branch: String): GitResult =
+        runWrite(listOf("checkout", branch), GitCommandType.LOCAL_WRITE)
+
+    override suspend fun checkoutDetached(hash: String): GitResult =
+        runWrite(listOf("checkout", "--detach", hash), GitCommandType.LOCAL_WRITE)
+
+    override suspend fun checkoutRemoteAsLocal(localBranch: String, remoteRef: String): GitResult =
+        runWrite(
+            listOf("checkout", "-b", localBranch, "--track", remoteRef),
+            GitCommandType.LOCAL_WRITE,
+        )
+
+    override suspend fun createBranchAndCheckout(name: String, startHash: String): GitResult =
+        runWrite(listOf("checkout", "-b", name, startHash), GitCommandType.LOCAL_WRITE)
+
+    override suspend fun createTag(name: String, hash: String): GitResult =
+        runWrite(listOf("tag", name, hash), GitCommandType.LOCAL_WRITE)
+
+    override suspend fun deleteLocalBranch(name: String, force: Boolean): GitResult =
+        runWrite(
+            listOf("branch", if (force) "-D" else "-d", name),
+            GitCommandType.LOCAL_WRITE,
+        )
+
+    override suspend fun deleteRemoteBranch(remote: String, branch: String): GitResult =
+        runWrite(
+            listOf("push", remote, "--delete", branch),
+            GitCommandType.NETWORK,
+        )
+
+    override suspend fun isCommitReachableFromHead(hash: String): Boolean {
+        val result = runner.run(listOf("merge-base", "--is-ancestor", hash, "HEAD"))
+        return when (result.exitCode) {
+            0 -> true
+            1 -> false
+            else -> throw GitException(result.exitCode, result.stderr)
+        }
+    }
+
+    override suspend fun localBranchesContaining(hash: String): List<String> =
+        requireText(
+            listOf(
+                "for-each-ref",
+                "--contains",
+                hash,
+                "--format=%(refname:short)",
+                "refs/heads",
+            ),
+        ).lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
 
     override suspend fun gitDirs(): GitDirs = readGitDirs(runner, dirs.workTree)
 
@@ -407,7 +493,7 @@ class CliGitBackend private constructor(
     companion object {
         internal const val MAX_DIFF_BYTES: Long = 2L * 1024 * 1024
 
-        private const val LOG_FORMAT = "%H%x1f%P%x1f%an%x1f%at%x1f%s"
+        private const val LOG_FORMAT = "%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%s"
         private const val DETAIL_FORMAT = "%H%x1f%P%x1f%an%x1f%ae%x1f%at%x1f%cn%x1f%ct%x1f%B"
 
         private val REFS_COMMAND = listOf(

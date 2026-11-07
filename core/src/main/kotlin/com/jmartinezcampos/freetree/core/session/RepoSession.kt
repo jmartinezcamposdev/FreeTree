@@ -1,5 +1,9 @@
 package com.jmartinezcampos.freetree.core.session
 
+import com.jmartinezcampos.freetree.core.filter.BranchFilter
+import com.jmartinezcampos.freetree.core.filter.BranchFilterEngine
+import com.jmartinezcampos.freetree.core.filter.BranchFilterRequest
+import com.jmartinezcampos.freetree.core.filter.validateBranchFilter
 import com.jmartinezcampos.freetree.core.git.GitBackend
 import com.jmartinezcampos.freetree.core.graph.GraphSnapshot
 import com.jmartinezcampos.freetree.core.graph.LaneLayoutEngine
@@ -42,6 +46,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 enum class SessionPhase { INACTIVE, ACTIVE, DRAINING }
 
@@ -56,6 +61,7 @@ class RepoSession(
     private val readDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val writeDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val clockMillis: () -> Long = System::currentTimeMillis,
+    val messageLog: MessageLog = MessageLog(),
     private val onTabChanged: (TabState) -> Unit = {},
 ) : AutoCloseable {
     val path: Path = path.toAbsolutePath().normalize()
@@ -65,6 +71,7 @@ class RepoSession(
     private val backendMutex = Mutex()
     private val graphMutex = Mutex()
     private val writeMutex = Mutex()
+    private val filterEngine = BranchFilterEngine()
 
     private val initialQuery = parseQuery(initialTab.query)
     private val normalizedInitialTab = initialTab.copy(path = this.path.toString())
@@ -80,7 +87,9 @@ class RepoSession(
             showRemotes = normalizedInitialTab.showRemotes,
             showTags = normalizedInitialTab.showTags,
             showHead = normalizedInitialTab.showHead,
-            selection = normalizedInitialTab.selectedHash?.let(Selection::Commit) ?: Selection.None,
+            branchFilter = normalizedInitialTab.branchFilter,
+            filterBusy = normalizedInitialTab.branchFilter.isActive,
+            selection = normalizedInitialTab.selectedHash?.let(Selection::Commit) ?: Selection.WorkingTree,
         ),
     )
     val state: StateFlow<RepoUiState> = _state.asStateFlow()
@@ -125,6 +134,9 @@ class RepoSession(
     private var selectionJob: Job? = null
     private var diffJob: Job? = null
     private var diffSequence = 0L
+
+    @Volatile
+    private var lastFilterDigest: String? = null
 
     @Volatile
     private var openDiffUnlimited = false
@@ -174,7 +186,9 @@ class RepoSession(
                 SessionPhase.DRAINING
             }
             if (_state.value.graph?.complete == true) {
-                _state.update { it.copy(load = LoadState.Idle) }
+                _state.update { it.copy(load = LoadState.Idle, filterBusy = false) }
+            } else if (_state.value.filterBusy) {
+                _state.update { it.copy(filterBusy = false) }
             }
         }
         scope?.cancel()
@@ -197,9 +211,30 @@ class RepoSession(
         if (reload) requestGraphLoad(LoadMode.CLEAR)
     }
 
+    fun setBranchFilter(filter: BranchFilter): Boolean {
+        val errors = validateBranchFilter(filter)
+        if (errors.isNotEmpty()) {
+            _state.update { it.copy(filterError = errors.first().message) }
+            return false
+        }
+        _state.update { it.copy(branchFilter = filter, filterError = null) }
+        updateTab { it.copy(branchFilter = filter) }
+        requestGraphLoad(LoadMode.CLEAR)
+        return true
+    }
+
     fun setHiddenRefs(hidden: Set<String>) {
-        _state.update {
-            it.copy(hiddenRefs = hidden, labelsByCommit = visibleLabels(it.refs, hidden, it.showRemotes, it.showTags))
+        _state.update { state ->
+            state.copy(
+                hiddenRefs = hidden,
+                labelsByCommit = visibleLabels(
+                    state.refs,
+                    hidden,
+                    state.showRemotes,
+                    state.showTags,
+                    state.filterVisibleRefs,
+                ),
+            )
         }
         updateTab { it.copy(hiddenRefs = hidden) }
         requestGraphLoad(LoadMode.CLEAR)
@@ -211,16 +246,34 @@ class RepoSession(
     }
 
     fun setShowRemotes(show: Boolean) {
-        _state.update {
-            it.copy(showRemotes = show, labelsByCommit = visibleLabels(it.refs, it.hiddenRefs, show, it.showTags))
+        _state.update { state ->
+            state.copy(
+                showRemotes = show,
+                labelsByCommit = visibleLabels(
+                    state.refs,
+                    state.hiddenRefs,
+                    show,
+                    state.showTags,
+                    state.filterVisibleRefs,
+                ),
+            )
         }
         updateTab { it.copy(showRemotes = show) }
         requestGraphLoad(LoadMode.CLEAR)
     }
 
     fun setShowTags(show: Boolean) {
-        _state.update {
-            it.copy(showTags = show, labelsByCommit = visibleLabels(it.refs, it.hiddenRefs, it.showRemotes, show))
+        _state.update { state ->
+            state.copy(
+                showTags = show,
+                labelsByCommit = visibleLabels(
+                    state.refs,
+                    state.hiddenRefs,
+                    state.showRemotes,
+                    show,
+                    state.filterVisibleRefs,
+                ),
+            )
         }
         updateTab { it.copy(showTags = show) }
         requestGraphLoad(LoadMode.CLEAR)
@@ -233,7 +286,8 @@ class RepoSession(
     }
 
     fun select(selection: Selection) {
-        val selectedHash = (selection as? Selection.Commit)?.hash
+        val effective = if (selection is Selection.None) Selection.WorkingTree else selection
+        val selectedHash = (effective as? Selection.Commit)?.hash
         synchronized(lock) {
             selectionJob?.cancel()
             selectionJob = null
@@ -243,7 +297,7 @@ class RepoSession(
             openDiffUnlimited = false
             _state.update {
                 it.copy(
-                    selection = selection,
+                    selection = effective,
                     commitDetail = null,
                     changedFiles = emptyList(),
                     openDiff = null,
@@ -252,14 +306,12 @@ class RepoSession(
             }
         }
         updateTab { it.copy(selectedHash = selectedHash) }
-        if (selection is Selection.Commit) loadCommitDetails(selection.hash)
+        if (effective is Selection.Commit) loadCommitDetails(effective.hash)
     }
 
     fun selectWorkingTree() = select(Selection.WorkingTree)
 
     fun selectCommit(hash: String) = select(Selection.Commit(hash))
-
-    fun clearSelection() = select(Selection.None)
 
     fun openDiff(target: DiffTarget, unlimited: Boolean = false) {
         val context = activeReadContext()
@@ -360,8 +412,53 @@ class RepoSession(
 
     fun pull(): Job = launchWrite(BusyOp.PULL) { it.pull() }
 
+    fun checkoutLocal(branch: String): Job =
+        launchWrite(BusyOp.CHECKOUT) { it.checkoutLocal(branch) }
+
+    fun checkoutDetached(hash: String): Job =
+        launchWrite(BusyOp.CHECKOUT) { it.checkoutDetached(hash) }
+
+    fun checkoutRemoteAsLocal(localBranch: String, remoteRef: String): Job =
+        launchWrite(BusyOp.CHECKOUT) { it.checkoutRemoteAsLocal(localBranch, remoteRef) }
+
+    fun createBranchAndCheckout(name: String, startHash: String): Job =
+        launchWrite(BusyOp.BRANCH) { it.createBranchAndCheckout(name, startHash) }
+
+    fun createTag(name: String, hash: String): Job =
+        launchWrite(BusyOp.TAG) { it.createTag(name, hash) }
+
+    fun deleteLocalBranch(name: String, force: Boolean = false): Job =
+        launchWrite(BusyOp.DELETE_BRANCH) { it.deleteLocalBranch(name, force) }
+
+    fun deleteRemoteBranch(remote: String, branch: String): Job =
+        launchWrite(BusyOp.DELETE_BRANCH) { it.deleteRemoteBranch(remote, branch) }
+
+    suspend fun isBranchDeletionSafe(hash: String, excludedLocalBranch: String? = null): Boolean =
+        withContext(readDispatcher) {
+            val backend = git()
+            backend.isCommitReachableFromHead(hash) ||
+                backend.localBranchesContaining(hash).any { it != excludedLocalBranch }
+        }
+
     fun clearMessage() {
         _state.update { it.copy(message = null) }
+    }
+
+    private fun publishMessage(message: UserMessage) {
+        messageLog.record(clockMillis(), path, message)
+        _state.update {
+            it.copy(message = message as? UserMessage.Error)
+        }
+    }
+
+    private fun publishReadMessage(activation: Int, message: UserMessage) {
+        synchronized(lock) {
+            if (!isCurrentLocked(activation)) return
+            messageLog.record(clockMillis(), path, message)
+            _state.update {
+                it.copy(message = message as? UserMessage.Error)
+            }
+        }
     }
 
     internal fun beginClose(): List<Job> = synchronized(lock) {
@@ -493,19 +590,49 @@ class RepoSession(
                 it.copy(
                     refs = refs,
                     head = head,
-                    labelsByCommit = visibleLabels(refs, it.hiddenRefs, it.showRemotes, it.showTags),
+                    labelsByCommit = visibleLabels(
+                        refs,
+                        it.hiddenRefs,
+                        it.showRemotes,
+                        it.showTags,
+                        it.filterVisibleRefs,
+                    ),
                 )
             }
         }
         return refsChanged to headChanged
     }
 
-    private fun publishStatus(activation: Int, status: WorkingStatus) {
+    private fun publishStatus(activation: Int?, status: WorkingStatus) {
         synchronized(lock) {
-            if (!isCurrentLocked(activation)) return
+            if (activation != null && !isCurrentLocked(activation)) return
             _state.update { it.copy(status = status) }
+            clearStaleDiffLocked(status)
         }
     }
+
+    private fun clearStaleDiffLocked(status: WorkingStatus) {
+        val target = _state.value.openDiffTarget ?: return
+        val present = when (target) {
+            is DiffTarget.Unstaged -> status.entries.any { entry ->
+                entry.path == target.path &&
+                    (entry.kind == StatusKind.UNTRACKED || hasWorkTreeChange(entry.worktree))
+            }
+            is DiffTarget.Staged -> status.entries.any { entry ->
+                entry.path == target.path &&
+                    entry.kind != StatusKind.UNMERGED &&
+                    entry.index != '?' &&
+                    hasWorkTreeChange(entry.index)
+            }
+            is DiffTarget.InCommit -> true
+        }
+        if (present) return
+        diffSequence++
+        openDiffUnlimited = false
+        _state.update { it.copy(openDiff = null, openDiffTarget = null) }
+    }
+
+    private fun hasWorkTreeChange(status: Char): Boolean = status != ' ' && status != '.'
 
     private fun publishOperation(activation: Int, repositoryDirs: GitDirs) {
         val operation = try {
@@ -555,11 +682,7 @@ class RepoSession(
             reportReadError(activation, "Status", e)
             return
         }
-        if (activation == null) {
-            _state.update { it.copy(status = status) }
-        } else {
-            publishStatus(activation, status)
-        }
+        publishStatus(activation, status)
         val repositoryDirs = dirs
         if (repositoryDirs != null) {
             if (activation == null) {
@@ -686,14 +809,13 @@ class RepoSession(
     }
 
     private fun reportWatcherFailure(activation: Int, error: Throwable) {
-        publishRead(activation) {
-            it.copy(
-                message = UserMessage.Error(
-                    "Repository watcher unavailable; polling every 3 s. ${describe(error)}",
-                    stderr(error),
-                ),
-            )
-        }
+        publishReadMessage(
+            activation,
+            UserMessage.Error(
+                "Repository watcher unavailable; polling every 3 s. ${describe(error)}",
+                stderr(error),
+            ),
+        )
     }
 
     private fun stopWatcher() {
@@ -736,6 +858,8 @@ class RepoSession(
             return
         }
 
+        if (!ensureFilterResolved(activation, backend)) return
+
         val spec = currentSpec()
         val previousState = _state.value
         val refsAtStart = previousState.refs.toList()
@@ -766,7 +890,11 @@ class RepoSession(
             }
         }
 
-        val engine = LaneLayoutEngine(flat = spec.flat)
+        val workingTreeHash = headAtStart?.commit?.takeIf { spec.includeHead }
+        val engine = LaneLayoutEngine(
+            flat = spec.flat,
+            workingTreeHash = workingTreeHash,
+        )
         if (spec.revs.isEmpty() && !spec.includeHead) {
             finishGraphLoad(
                 activation,
@@ -840,31 +968,18 @@ class RepoSession(
             graphHead = head
             val previous = _state.value
             val selection = previous.selection
-            val adjusted = if (selection is Selection.Commit && snapshot.indexOfHash(selection.hash) < 0) {
-                Selection.None
-            } else {
-                selection
+            val adjusted = when {
+                selection is Selection.Commit && snapshot.indexOfHash(selection.hash) < 0 -> {
+                    Selection.WorkingTree
+                }
+                selection is Selection.None -> Selection.WorkingTree
+                else -> selection
             }
-            val detail = if (adjusted is Selection.None && selection is Selection.Commit) {
-                null
-            } else {
-                previous.commitDetail
-            }
-            val files = if (adjusted is Selection.None && selection is Selection.Commit) {
-                emptyList()
-            } else {
-                previous.changedFiles
-            }
-            val diff = if (adjusted is Selection.None && selection is Selection.Commit) {
-                null
-            } else {
-                previous.openDiff
-            }
-            val diffTarget = if (adjusted is Selection.None && selection is Selection.Commit) {
-                null
-            } else {
-                previous.openDiffTarget
-            }
+            val selectionReplaced = adjusted != selection
+            val detail = if (selectionReplaced) null else previous.commitDetail
+            val files = if (selectionReplaced) emptyList() else previous.changedFiles
+            val diff = if (selectionReplaced) null else previous.openDiff
+            val diffTarget = if (selectionReplaced) null else previous.openDiffTarget
             _state.update {
                 it.copy(
                     graph = snapshot,
@@ -906,10 +1021,15 @@ class RepoSession(
     private fun publishLoadError(activation: Int, sequence: Long, error: Throwable) {
         synchronized(lock) {
             if (!isCurrentLoadLocked(activation, sequence)) return
+            val message = UserMessage.Error(
+                "Could not load the graph. ${describe(error)}",
+                stderr(error),
+            )
+            messageLog.record(clockMillis(), path, message)
             _state.update {
                 it.copy(
                     load = LoadState.Error(describe(error)),
-                    message = UserMessage.Error("Could not load the graph. ${describe(error)}", stderr(error)),
+                    message = message,
                 )
             }
         }
@@ -926,14 +1046,122 @@ class RepoSession(
         }
     }
 
+    private suspend fun ensureFilterResolved(activation: Int, backend: GitBackend): Boolean {
+        val snapshot = _state.value
+        val filter = snapshot.branchFilter
+        if (!filter.isActive) {
+            lastFilterDigest = null
+            synchronized(lock) {
+                if (!isCurrentLocked(activation)) return false
+                _state.update { state ->
+                    state.copy(
+                        filterVisibleRefs = null,
+                        filterBusy = false,
+                        filterError = null,
+                        labelsByCommit = visibleLabels(
+                            state.refs,
+                            state.hiddenRefs,
+                            state.showRemotes,
+                            state.showTags,
+                            null,
+                        ),
+                    )
+                }
+            }
+            return true
+        }
+
+        val digest = filterDigest(snapshot)
+        if (digest == lastFilterDigest && snapshot.filterVisibleRefs != null) return true
+
+        synchronized(lock) {
+            if (!isCurrentLocked(activation)) return false
+            _state.update { it.copy(filterBusy = true, filterError = null) }
+        }
+
+        val request = BranchFilterRequest(
+            filter = filter,
+            refs = snapshot.refs,
+            hiddenRefs = snapshot.hiddenRefs,
+            showRemotes = snapshot.showRemotes,
+        )
+        val plan = filterEngine.plan(request)
+        val visible = try {
+            if (plan.scanRevs.isEmpty()) {
+                emptySet()
+            } else {
+                val spec = LogSpec(
+                    revs = plan.scanRevs,
+                    includeHead = false,
+                    excludeRevs = plan.excludeRevs,
+                )
+                filterEngine.resolve(request, backend.logStream(spec))
+                    .visibleRefs
+                    .map { it.fullName }
+                    .toSet()
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            synchronized(lock) {
+                if (isCurrentLocked(activation)) {
+                    _state.update { it.copy(filterBusy = false, filterError = describe(e)) }
+                }
+            }
+            publishReadMessage(
+                activation,
+                UserMessage.Error("Could not apply filters. ${describe(e)}", stderr(e)),
+            )
+            return false
+        }
+
+        synchronized(lock) {
+            if (!isCurrentLocked(activation)) return false
+            lastFilterDigest = digest
+            _state.update { state ->
+                state.copy(
+                    filterVisibleRefs = visible,
+                    filterBusy = false,
+                    filterError = null,
+                    labelsByCommit = visibleLabels(
+                        state.refs,
+                        state.hiddenRefs,
+                        state.showRemotes,
+                        state.showTags,
+                        visible,
+                    ),
+                )
+            }
+        }
+        return true
+    }
+
+    private fun filterDigest(state: RepoUiState): String = buildString {
+        append(state.showRemotes).append('|')
+        append(state.hiddenRefs.sorted().joinToString(",")).append('|')
+        state.refs.sortedBy { it.fullName }.forEach {
+            append(it.fullName).append('=').append(it.commit).append(':').append(it.isCurrentBranch).append(';')
+        }
+        append(state.branchFilter)
+    }
+
     private fun currentSpec(): LogSpec {
         val snapshot = _state.value
+        val filterActive = snapshot.branchFilter.isActive
+        val visible = snapshot.filterVisibleRefs
+        val refs = when {
+            !filterActive -> snapshot.refs
+            visible == null -> emptyList()
+            else -> snapshot.refs.filter { ref ->
+                ref.kind != RefKind.TAG && ref.fullName in visible
+            }
+        }
         return resolve(
             lastValidQuery,
-            snapshot.refs,
+            refs,
             snapshot.hiddenRefs,
             snapshot.showRemotes,
-            snapshot.showTags,
+            if (filterActive) false else snapshot.showTags,
             snapshot.showHead,
         )
     }
@@ -966,20 +1194,20 @@ class RepoSession(
                 try {
                     val backend = git()
                     val result = action(backend)
-                    _state.update { it.copy(message = writeMessage(op, result)) }
+                    publishMessage(writeMessage(op, result))
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    _state.update { it.copy(message = UserMessage.Error(describe(e), stderr(e))) }
+                    publishMessage(UserMessage.Error(describe(e), stderr(e)))
                 }
                 try {
                     refreshAfterWrite()
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
-                    _state.update {
-                        it.copy(message = UserMessage.Error("Could not refresh after the write. ${describe(e)}", stderr(e)))
-                    }
+                    publishMessage(
+                        UserMessage.Error("Could not refresh after the write. ${describe(e)}", stderr(e)),
+                    )
                 }
             } finally {
                 _state.update { it.copy(busy = null) }
@@ -993,10 +1221,11 @@ class RepoSession(
         try {
             val status = backend.status()
             _state.update { it.copy(status = status) }
+            synchronized(lock) { clearStaleDiffLocked(status) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            _state.update { it.copy(message = UserMessage.Error("Could not refresh status. ${describe(e)}", stderr(e))) }
+            publishMessage(UserMessage.Error("Could not refresh status. ${describe(e)}", stderr(e)))
         }
 
         val refs = try {
@@ -1004,7 +1233,7 @@ class RepoSession(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            _state.update { it.copy(message = UserMessage.Error("Could not refresh refs. ${describe(e)}", stderr(e))) }
+            publishMessage(UserMessage.Error("Could not refresh refs. ${describe(e)}", stderr(e)))
             null
         }
         val head = try {
@@ -1012,7 +1241,7 @@ class RepoSession(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            _state.update { it.copy(message = UserMessage.Error("Could not refresh HEAD. ${describe(e)}", stderr(e))) }
+            publishMessage(UserMessage.Error("Could not refresh HEAD. ${describe(e)}", stderr(e)))
             null
         }
 
@@ -1023,7 +1252,13 @@ class RepoSession(
                 it.copy(
                     refs = refs,
                     head = head,
-                    labelsByCommit = visibleLabels(refs, it.hiddenRefs, it.showRemotes, it.showTags),
+                    labelsByCommit = visibleLabels(
+                        refs,
+                        it.hiddenRefs,
+                        it.showRemotes,
+                        it.showTags,
+                        it.filterVisibleRefs,
+                    ),
                 )
             }
         }
@@ -1033,9 +1268,7 @@ class RepoSession(
             val operation = try {
                 detectOperationInProgress(repositoryDirs)
             } catch (e: Exception) {
-                _state.update {
-                    it.copy(message = UserMessage.Error("Could not detect the repository operation. ${describe(e)}"))
-                }
+                publishMessage(UserMessage.Error("Could not detect the repository operation. ${describe(e)}"))
                 null
             }
             _state.update { it.copy(operationInProgress = operation) }
@@ -1063,6 +1296,10 @@ class RepoSession(
                 BusyOp.COMMIT -> "Commit created."
                 BusyOp.PUSH -> output.ifBlank { "Push complete." }
                 BusyOp.PULL -> output.ifBlank { "Pull complete." }
+                BusyOp.CHECKOUT -> output.ifBlank { "Checked out." }
+                BusyOp.BRANCH -> output.ifBlank { "Branch created." }
+                BusyOp.TAG -> output.ifBlank { "Tag created." }
+                BusyOp.DELETE_BRANCH -> output.ifBlank { "Branch deleted." }
             }
             UserMessage.Info(text)
         }
@@ -1073,7 +1310,7 @@ class RepoSession(
     }
 
     private fun rejected(text: String): Job {
-        _state.update { it.copy(message = UserMessage.Error(text)) }
+        publishMessage(UserMessage.Error(text))
         return Job().apply { complete() }
     }
 
@@ -1105,10 +1342,10 @@ class RepoSession(
     private fun reportReadError(activation: Int?, label: String, error: Throwable) {
         val message = UserMessage.Error("$label failed. ${describe(error)}", stderr(error))
         if (activation == null) {
-            _state.update { it.copy(message = message) }
+            publishMessage(message)
             return
         }
-        publishRead(activation) { it.copy(message = message) }
+        publishReadMessage(activation, message)
     }
 
     private fun reportDiffError(activation: Int, sequence: Long, error: Throwable) {
@@ -1174,6 +1411,7 @@ private fun visibleLabels(
     hidden: Set<String>,
     showRemotes: Boolean,
     showTags: Boolean,
+    visibleRefs: Set<String>? = null,
 ): Map<String, List<GitRef>> = refs
     .filter { ref ->
         ref.fullName !in hidden &&
@@ -1181,7 +1419,8 @@ private fun visibleLabels(
                 RefKind.LOCAL_BRANCH -> true
                 RefKind.REMOTE_BRANCH -> showRemotes
                 RefKind.TAG -> showTags
-            }
+            } &&
+            (visibleRefs == null || ref.kind == RefKind.TAG || ref.fullName in visibleRefs)
     }
     .groupBy { it.commit }
 

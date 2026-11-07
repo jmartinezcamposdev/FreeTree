@@ -60,7 +60,7 @@ class RealRepositoryUiTest {
                 onNodeWithTag(UiTestTags.changedFile("src/App.kt")).performClick()
                 waitUntil(timeoutMillis = 20_000) { state(manager).openDiff != null }
                 onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
-                onNodeWithText("+fun main() = Unit").assertExists()
+                onNodeWithText("fun main() = Unit").assertExists()
 
                 onNodeWithTag(UiTestTags.CHANGES_ROW).performClick()
                 waitUntil(timeoutMillis = 20_000) {
@@ -122,7 +122,7 @@ class RealRepositoryUiTest {
                 onNodeWithText("Working tree clean").assertExists()
 
                 repo.writeFile("README.md", "line one\nrefresh me\n")
-                onNodeWithTag(UiTestTags.REFRESH).performClick()
+                manager.activeSession.value!!.refresh()
                 awaitStatus(manager) { entry ->
                     entry.path == "README.md" && entry.worktree == 'M'
                 }

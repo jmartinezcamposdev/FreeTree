@@ -75,8 +75,13 @@ Without an argument, FreeTree restores the previous session or shows the empty s
 | `Home` / `End` | Select the Changes row / the oldest commit |
 | `Ctrl+R` (macOS: `Cmd+R`) | Refresh the active repository |
 | `Ctrl+W` (macOS: `Cmd+W`) | Close the active tab |
-| `Ctrl+Tab` (macOS: `Cmd+Tab`, reserved by the OS) | Activate the next tab |
+| `Ctrl+Tab` | Activate the next tab |
+| `Ctrl+Shift+Tab` | Activate the previous tab |
+| `Ctrl+O` (macOS: `Cmd+O`) | Open a repository |
 | `Enter` in the query field | Apply the query |
+
+The menu bar also exposes repository actions, recent repositories, ref visibility, window
+navigation, and About FreeTree.
 
 ## Packaging
 
@@ -84,14 +89,22 @@ A native installer can only be produced for the host operating system; `jpackage
 host-specific. All targets are declared, but Gradle skips the ones this host cannot build.
 
 ```bash
-./gradlew :app:packageDmg   # macOS: app/build/compose/binaries/main/dmg/FreeTree-1.0.0.dmg
+./gradlew :app:packageDmg   # macOS: app/build/compose/binaries/main/dmg/FreeTree-1.1.0.dmg
 ./gradlew :app:packageDeb   # Linux: requires dpkg
+./gradlew :app:packageRpm   # Linux: requires rpm-build
+# Linux: app/build/compose/binaries/main/rpm/freetree-1.1.0-1.x86_64.rpm
 ./gradlew :app:packageMsi   # Windows: requires WiX
 ```
 
-On macOS the Dmg is built and verified. `packageDeb` and `packageMsi` are skipped on macOS, and
-the reverse is true on Linux and Windows. The Dmg is not signed or notarized; Gatekeeper may warn
-when it is downloaded on another machine.
+On Fedora, install the RPM tooling first:
+
+```bash
+sudo dnf install rpm-build
+```
+
+On macOS the Dmg is built and verified. `packageDeb`, `packageRpm`, and `packageMsi` are skipped on
+macOS, and the reverse is true on Linux and Windows. The Dmg is not signed or notarized; Gatekeeper
+may warn when it is downloaded on another machine.
 
 ## Benchmarks
 

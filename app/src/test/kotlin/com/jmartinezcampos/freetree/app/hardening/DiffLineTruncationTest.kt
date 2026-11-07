@@ -44,8 +44,9 @@ class DiffLineTruncationTest {
             }
         }
 
-        val truncated = "+" + "x".repeat(GraphStyle.MAX_DIFF_LINE_CHARS) + "…"
+        val truncated = "x".repeat(GraphStyle.MAX_DIFF_LINE_CHARS) + "…"
         onNodeWithText(truncated).assertExists()
-        assertTrue(onAllNodesWithText("+$longLine").fetchSemanticsNodes().isEmpty())
+        onNodeWithText("+").assertExists()
+        assertTrue(onAllNodesWithText(longLine).fetchSemanticsNodes().isEmpty())
     }
 }

@@ -83,6 +83,33 @@ class TabBarPolishUiTest {
     }
 
     @Test
+    fun closeIconIsGeometricallyCenteredInCloseButton() = runDesktopComposeUiTest(width = 1200, height = 800) {
+        val fixture = fixture()
+        try {
+            setContent { App(fixture.manager) }
+            waitUntil(timeoutMillis = 5_000) {
+                fixture.manager.activeSession.value?.state?.value?.graph != null
+            }
+
+            val button = onNodeWithTag(UiTestTags.tabClose(0)).getUnclippedBoundsInRoot()
+            val icon = onNodeWithTag(UiTestTags.tabCloseIcon(0), useUnmergedTree = true)
+                .getUnclippedBoundsInRoot()
+
+            onNodeWithTag(UiTestTags.tabCloseIcon(0), useUnmergedTree = true)
+                .assertWidthIsEqualTo(GraphStyle.TAB_CLOSE_ICON_SIZE)
+                .assertHeightIsEqualTo(GraphStyle.TAB_CLOSE_ICON_SIZE)
+            val buttonCenterX = (button.left + button.right) / 2
+            val buttonCenterY = (button.top + button.bottom) / 2
+            val iconCenterX = (icon.left + icon.right) / 2
+            val iconCenterY = (icon.top + icon.bottom) / 2
+            assertEquals(buttonCenterX.value, iconCenterX.value, 0.5f)
+            assertEquals(buttonCenterY.value, iconCenterY.value, 0.5f)
+        } finally {
+            fixture.close()
+        }
+    }
+
+    @Test
     fun tabsRespectStartPaddingAndExposeActiveSelection() = runDesktopComposeUiTest(width = 1200, height = 800) {
         val fixture = fixture()
         try {

@@ -2,6 +2,9 @@
 
 Parent: [SPEC.md](SPEC.md). Contracts: [02-contracts.md](02-contracts.md).
 
+The user-facing filter system is branch-level and lives in [12-filters.md](12-filters.md). The
+grammar below remains the lower-level query layer; it is not the Filters dialog.
+
 ## Manual refs
 
 Panel grouped as Locals / Remotes / Tags with one checkbox per ref, plus global toggles for Remotes,

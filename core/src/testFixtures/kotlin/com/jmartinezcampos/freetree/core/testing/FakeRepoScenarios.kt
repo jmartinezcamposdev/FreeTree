@@ -50,15 +50,15 @@ object FakeRepoScenarios {
     private val Root = hash(1)
 
     private val commitList: List<RawCommit> = listOf(
-        RawCommit(Merge, listOf(TopicTip, TopicBase), "Ada Lovelace", 1_700_000_900L, "Merge topic into main"),
-        RawCommit(TopicTip, listOf(SharedBase), "Grace Hopper", 1_700_000_800L, "Add graph panel"),
-        RawCommit(TopicBase, listOf(SharedBase), "Ada Lovelace", 1_700_000_700L, "Start topic work"),
-        RawCommit(SharedBase, listOf(Older), "Linus Torvalds", 1_700_000_600L, "Refactor session wiring"),
-        RawCommit(Older, listOf(Tagged), "Grace Hopper", 1_700_000_500L, "Fix query parser"),
-        RawCommit(Tagged, listOf(hash(3)), "Ada Lovelace", 1_700_000_400L, "Release candidate"),
-        RawCommit(hash(3), listOf(hash(2)), "Linus Torvalds", 1_700_000_300L, "Add diff view"),
-        RawCommit(hash(2), listOf(Root), "Grace Hopper", 1_700_000_200L, "Add graph list"),
-        RawCommit(Root, emptyList(), "Ada Lovelace", 1_700_000_100L, "Initial commit"),
+        RawCommit(Merge, listOf(TopicTip, TopicBase), "Ada Lovelace", 1_700_000_900L, "Merge topic into main", "ada@example.com"),
+        RawCommit(TopicTip, listOf(SharedBase), "Grace Hopper", 1_700_000_800L, "Add graph panel", "grace@example.com"),
+        RawCommit(TopicBase, listOf(SharedBase), "Ada Lovelace", 1_700_000_700L, "Start topic work", "ada@example.com"),
+        RawCommit(SharedBase, listOf(Older), "Linus Torvalds", 1_700_000_600L, "Refactor session wiring", "linus@example.com"),
+        RawCommit(Older, listOf(Tagged), "Grace Hopper", 1_700_000_500L, "Fix query parser", "grace@example.com"),
+        RawCommit(Tagged, listOf(hash(3)), "Ada Lovelace", 1_700_000_400L, "Release candidate", "ada@example.com"),
+        RawCommit(hash(3), listOf(hash(2)), "Linus Torvalds", 1_700_000_300L, "Add diff view", "linus@example.com"),
+        RawCommit(hash(2), listOf(Root), "Grace Hopper", 1_700_000_200L, "Add graph list", "grace@example.com"),
+        RawCommit(Root, emptyList(), "Ada Lovelace", 1_700_000_100L, "Initial commit", "ada@example.com"),
     )
 
     private val refList: List<GitRef> = listOf(

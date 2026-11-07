@@ -2,27 +2,31 @@ package com.jmartinezcampos.freetree.app.ui
 
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
-import androidx.compose.ui.test.assertIsOff
-import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
-import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.requestFocus
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
+import com.jmartinezcampos.freetree.app.smoke.saveScreenshot
 import com.jmartinezcampos.freetree.core.model.GitRef
 import com.jmartinezcampos.freetree.core.model.HeadInfo
 import com.jmartinezcampos.freetree.core.model.RefKind
 import com.jmartinezcampos.freetree.core.model.StatusEntry
 import com.jmartinezcampos.freetree.core.model.StatusKind
 import com.jmartinezcampos.freetree.core.model.WorkingStatus
+import com.jmartinezcampos.freetree.core.session.RepoUiState
 import com.jmartinezcampos.freetree.core.testing.FakeMethod
 import com.jmartinezcampos.freetree.core.testing.RandomDag
 import java.nio.file.Path
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class AppShellUiTest {
@@ -49,34 +53,157 @@ class AppShellUiTest {
     }
 
     @Test
-    fun toolbarShowsBranchAndRefsPanelTogglesRefs() = runDesktopComposeUiTest(width = 1400, height = 900) {
+    fun toolbarShowsBranchAheadBehindAndPullAndPushActions() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val fixture = fixture()
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.graph != null
+                }
+
+                onNodeWithTag(UiTestTags.TOOLBAR).assertExists()
+                onNodeWithTag(UiTestTags.REFRESH).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.QUERY_INPUT).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.REFS_TOGGLE).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.BRANCH_BUTTON).assertExists()
+                onNodeWithTag(UiTestTags.BRANCH_BUTTON).assertHasClickAction()
+                onNodeWithTag(UiTestTags.BRANCH_ICON, useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.BRANCH_LABEL, useUnmergedTree = true).assertTextContains("main")
+                onNodeWithTag(UiTestTags.PULL_ICON, useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.PUSH_ICON, useUnmergedTree = true).assertExists()
+                val push = onNodeWithTag(UiTestTags.PUSH).getUnclippedBoundsInRoot()
+                val pull = onNodeWithTag(UiTestTags.PULL).getUnclippedBoundsInRoot()
+                assertTrue(push.right < pull.left, "expected Push before Pull: $push / $pull")
+                onNodeWithTag(UiTestTags.FILTERS_BUTTON).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_BUTTON).assertHasClickAction()
+                onNodeWithTag(UiTestTags.FILTERS_ICON, useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertDoesNotExist()
+                onNodeWithText("↑1 ↓2").assertExists()
+
+                onNodeWithTag(UiTestTags.FILTERS_ACTIVE_COUNT).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.FILTERS_BUTTON).performClick()
+                onNodeWithTag(UiTestTags.FILTERS_DIALOG).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_INCLUDE_SECTION, useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_EXCLUDE_SECTION, useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_ADD_INCLUDE).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_ADD_EXCLUDE).assertExists()
+                onNodeWithText("No includes — all branches are visible.", useUnmergedTree = true).assertExists()
+                onNodeWithText("No excludes — nothing is hidden.", useUnmergedTree = true).assertExists()
+                onNodeWithTag(UiTestTags.FILTERS_APPLY).assertExists()
+                saveScreenshot("34-filters-dialog.png")
+                onNodeWithTag(UiTestTags.FILTERS_CANCEL).performClick()
+                onNodeWithTag(UiTestTags.FILTERS_DIALOG).assertDoesNotExist()
+
+                fixture.backend.clearCalls()
+                onNodeWithTag(UiTestTags.PULL).performClick()
+                waitUntil(timeoutMillis = 5_000) { fixture.backend.callCount(FakeMethod.PULL) == 1 }
+            } finally {
+                fixture.close()
+            }
+        }
+
+    @Test
+    fun filterCountsSeparateBranchAndContentTerms() {
+        assertEquals(FilterCounts(0, 0), filterCounts(RepoUiState()))
+
+        val counts = filterCounts(
+            RepoUiState(
+                query = "ref:origin/* -ref:topic author:Ada msg:fix path:src",
+                hiddenRefs = setOf("refs/heads/main"),
+            ),
+        )
+        assertEquals(FilterCounts(branch = 3, other = 3), counts)
+    }
+
+    @Test
+    fun filterIndicatorsTrackBranchAndContentFilters() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val fixture = fixture()
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.graph != null
+                }
+
+                val session = fixture.manager.activeSession.value!!
+                session.toggleRef("refs/heads/main")
+                waitUntil(timeoutMillis = 5_000) {
+                    "refs/heads/main" in session.state.value.hiddenRefs
+                }
+                onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).assertTextContains("Branches 1")
+                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertDoesNotExist()
+
+                session.applyQuery("author:Ada")
+                waitUntil(timeoutMillis = 5_000) {
+                    session.state.value.query == "author:Ada" && session.state.value.queryError == null
+                }
+                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertTextContains("Other 1")
+
+                val branches = onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).getUnclippedBoundsInRoot()
+                val other = onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).getUnclippedBoundsInRoot()
+                val filters = onNodeWithTag(UiTestTags.FILTERS_BUTTON).getUnclippedBoundsInRoot()
+                assertTrue(
+                    branches.right < other.left && other.right < filters.left,
+                    "expected indicators before Filters: branches=$branches other=$other filters=$filters",
+                )
+                saveScreenshot("19-toolbar.png")
+
+                session.toggleRef("refs/heads/main")
+                waitUntil(timeoutMillis = 5_000) {
+                    "refs/heads/main" !in session.state.value.hiddenRefs
+                }
+                onNodeWithTag(UiTestTags.FILTERS_BRANCH_COUNT).assertDoesNotExist()
+                onNodeWithTag(UiTestTags.FILTERS_OTHER_COUNT).assertTextContains("Other 1")
+            } finally {
+                fixture.close()
+            }
+        }
+
+    @Test
+    fun queryAppliesAndTabsActivateCloseAndCycle() = runDesktopComposeUiTest(width = 1400, height = 900) {
         val fixture = fixture()
         try {
             setContent { App(fixture.manager) }
             waitUntil(timeoutMillis = 5_000) {
                 fixture.manager.activeSession.value?.state?.value?.graph != null
             }
+            val firstId = fixture.manager.activeId.value!!
+            val session = fixture.manager.activeSession.value!!
 
-            onNodeWithTag(UiTestTags.TOOLBAR).assertExists()
-            onNodeWithTag(UiTestTags.BRANCH_LABEL).assertExists()
-            onNodeWithText("↑1 ↓2").assertExists()
-
-            fixture.backend.clearCalls()
-            onNodeWithTag(UiTestTags.PULL).performClick()
-            waitUntil(timeoutMillis = 5_000) { fixture.backend.callCount(FakeMethod.PULL) == 1 }
-
-            onNodeWithTag(UiTestTags.REFS_TOGGLE).performClick()
-            onNodeWithTag(UiTestTags.REFS_PANEL).assertExists()
-            onNodeWithTag(UiTestTags.refItem("refs/heads/main")).assertIsOn()
-            onNodeWithTag(UiTestTags.refItem("refs/remotes/origin/main")).assertIsOn()
-            onNodeWithTag(UiTestTags.refItem("refs/tags/v1.0")).assertIsOn()
-
-            onNodeWithTag(UiTestTags.SHOW_REMOTES).performClick()
+            session.applyQuery("msg:fix")
             waitUntil(timeoutMillis = 5_000) {
-                fixture.manager.activeSession.value?.state?.value?.showRemotes == false
+                session.state.value.query == "msg:fix"
             }
-            onNodeWithTag(UiTestTags.SHOW_REMOTES).assertIsOff()
-            assertFalse(fixture.manager.activeSession.value!!.state.value.showRemotes)
+            waitUntil(timeoutMillis = 5_000) {
+                fixture.backend.callsOf(FakeMethod.LOG).any { it.spec?.grep == "fix" }
+            }
+            assertNull(session.state.value.queryError)
+
+            fixture.manager.openRepo(Path.of("/repo/ui-two"))
+            waitUntil(timeoutMillis = 5_000) { fixture.manager.tabs.value.size == 2 }
+            val secondId = fixture.manager.activeId.value!!
+            onNodeWithTag(UiTestTags.tab(0)).assertExists()
+            onNodeWithTag(UiTestTags.tab(1)).assertExists()
+
+            onNodeWithTag(UiTestTags.tab(0)).performClick()
+            waitUntil(timeoutMillis = 5_000) { fixture.manager.activeId.value == firstId }
+            onNodeWithTag(UiTestTags.tab(1)).performClick()
+            waitUntil(timeoutMillis = 5_000) { fixture.manager.activeId.value == secondId }
+
+            onNodeWithTag(UiTestTags.GRAPH_LIST).requestFocus()
+            onNodeWithTag(UiTestTags.GRAPH_LIST).performKeyInput {
+                keyDown(Key.CtrlLeft)
+                keyDown(Key.Tab)
+                keyUp(Key.Tab)
+                keyUp(Key.CtrlLeft)
+            }
+            waitUntil(timeoutMillis = 5_000) { fixture.manager.activeId.value == firstId }
+
+            onNodeWithTag(UiTestTags.tabClose(0)).performClick()
+            waitUntil(timeoutMillis = 5_000) { fixture.manager.tabs.value.size == 1 }
+            assertEquals(secondId, fixture.manager.activeId.value)
         } finally {
             fixture.close()
         }
@@ -94,56 +221,6 @@ class AppShellUiTest {
             onNodeWithTag(UiTestTags.NEW_TAB).performClick()
             waitForIdle()
             assertEquals(1, opened)
-        } finally {
-            fixture.close()
-        }
-    }
-
-    @Test
-    fun queryAppliesOnEnterAndTabsActivateAndClose() = runDesktopComposeUiTest(width = 1400, height = 900) {
-        val fixture = fixture()
-        try {
-            setContent { App(fixture.manager) }
-            waitUntil(timeoutMillis = 5_000) {
-                fixture.manager.activeSession.value?.state?.value?.graph != null
-            }
-            val firstId = fixture.manager.activeId.value!!
-
-            onNodeWithTag(UiTestTags.QUERY_INPUT).performTextInput("msg:fix")
-            onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                keyDown(Key.Enter)
-                keyUp(Key.Enter)
-            }
-            waitUntil(timeoutMillis = 5_000) {
-                fixture.manager.activeSession.value?.state?.value?.query == "msg:fix"
-            }
-            waitUntil(timeoutMillis = 5_000) {
-                fixture.backend.callsOf(FakeMethod.LOG).any { it.spec?.grep == "fix" }
-            }
-            onNodeWithTag(UiTestTags.QUERY_ERROR).assertDoesNotExist()
-
-            fixture.manager.openRepo(Path.of("/repo/ui-two"))
-            waitUntil(timeoutMillis = 5_000) { fixture.manager.tabs.value.size == 2 }
-            val secondId = fixture.manager.activeId.value!!
-            onNodeWithTag(UiTestTags.tab(0)).assertExists()
-            onNodeWithTag(UiTestTags.tab(1)).assertExists()
-
-            onNodeWithTag(UiTestTags.tab(0)).performClick()
-            waitUntil(timeoutMillis = 5_000) { fixture.manager.activeId.value == firstId }
-            onNodeWithTag(UiTestTags.tab(1)).performClick()
-            waitUntil(timeoutMillis = 5_000) { fixture.manager.activeId.value == secondId }
-
-            onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                keyDown(Key.CtrlLeft)
-                keyDown(Key.Tab)
-                keyUp(Key.Tab)
-                keyUp(Key.CtrlLeft)
-            }
-            waitUntil(timeoutMillis = 5_000) { fixture.manager.activeId.value == firstId }
-
-            onNodeWithTag(UiTestTags.tabClose(0)).performClick()
-            waitUntil(timeoutMillis = 5_000) { fixture.manager.tabs.value.size == 1 }
-            assertEquals(secondId, fixture.manager.activeId.value)
         } finally {
             fixture.close()
         }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +36,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -45,10 +47,14 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
+import com.jmartinezcampos.freetree.app.menu.stagedPaths
+import com.jmartinezcampos.freetree.app.menu.unstagedPaths
 import com.jmartinezcampos.freetree.core.graph.GraphSnapshot
 import com.jmartinezcampos.freetree.core.graph.SegKind
 import com.jmartinezcampos.freetree.core.model.GitRef
@@ -63,6 +69,9 @@ import kotlinx.coroutines.launch
 internal fun GraphList(
     state: RepoUiState,
     session: RepoSession?,
+    viewMode: HistoryViewMode = HistoryViewMode.COMPACT,
+    showDate: Boolean = true,
+    onCommitAction: (CommitMenuAction) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalGraphColors.current
@@ -121,6 +130,7 @@ internal fun GraphList(
             return
         }
         val current = selectedCommitRow
+        if (current < 0 && delta < 0) return
         val target = when {
             current < 0 && delta > 0 -> 0
             current < 0 -> 0
@@ -215,6 +225,16 @@ internal fun GraphList(
             0
         }
         val headHash = state.head?.commit?.takeIf { state.showHead }
+        val showHead = showHeadHighlight(state.head, state.labelsByCommit, state.showHead)
+        val workingTreeRow = state.head?.commit
+            ?.let(graph::indexOfHash)
+            ?.takeIf { it >= 0 }
+            ?: -1
+        val workingTreeLane = graph.workingTreeLane?.takeIf { workingTreeRow >= 0 }
+        val workingLane = workingTreeLane
+            ?: if (graph.rowCount > 0) graph.nodeLane(0) else 0
+        val stagedCount = state.status.stagedPaths().size
+        val unstagedCount = state.status.unstagedPaths().size
 
         Box(Modifier.fillMaxSize()) {
             LazyColumn(
@@ -226,7 +246,13 @@ internal fun GraphList(
                 item(key = "changes") {
                     ChangesGraphRow(
                         changeCount = state.status?.entries?.size ?: 0,
+                        stagedCount = stagedCount,
+                        unstagedCount = unstagedCount,
                         selected = state.selection is Selection.WorkingTree,
+                        laneWidth = GraphStyle.LANE_WIDTH * visibleLanes.toFloat(),
+                        workingLane = workingLane,
+                        laneOffset = laneOffset,
+                        connectToCommit = workingTreeLane != null,
                         onClick = { session?.selectWorkingTree() },
                     )
                 }
@@ -245,17 +271,30 @@ internal fun GraphList(
                     key = { index -> graph.hash(index) },
                 ) { row ->
                     val hash = graph.hash(row)
-                    CommitGraphRow(
-                        graph = graph,
-                        row = row,
-                        refs = state.labelsByCommit[hash].orEmpty(),
-                        isHead = hash == headHash,
-                        isSelected = state.selection is Selection.Commit &&
-                            (state.selection as Selection.Commit).hash == hash,
-                        visibleLanes = visibleLanes,
-                        laneOffset = laneOffset,
-                        onClick = { session?.selectCommit(hash) },
-                    )
+                    CommitContextMenu(
+                        refs = state.refs,
+                        hash = hash,
+                        head = state.head,
+                        busy = state.busy != null,
+                        onAction = onCommitAction,
+                        onSecondaryClick = { session?.selectCommit(hash) },
+                    ) {
+                        CommitGraphRow(
+                            graph = graph,
+                            row = row,
+                            refs = state.labelsByCommit[hash].orEmpty(),
+                            isHead = hash == headHash && showHead,
+                            isSelected = state.selection is Selection.Commit &&
+                                (state.selection as Selection.Commit).hash == hash,
+                            workingTreeLane = workingTreeLane,
+                            workingTreeRow = workingTreeRow,
+                            visibleLanes = visibleLanes,
+                            laneOffset = laneOffset,
+                            viewMode = viewMode,
+                            showDate = showDate,
+                            onClick = { session?.selectCommit(hash) },
+                        )
+                    }
                 }
             }
             ModernScrollbar(
@@ -271,14 +310,20 @@ internal fun GraphList(
 @Composable
 private fun ChangesGraphRow(
     changeCount: Int,
+    stagedCount: Int,
+    unstagedCount: Int,
     selected: Boolean,
+    laneWidth: androidx.compose.ui.unit.Dp,
+    workingLane: Int,
+    laneOffset: Int,
+    connectToCommit: Boolean,
     onClick: () -> Unit,
 ) {
     val colors = LocalGraphColors.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(GraphStyle.ROW_HEIGHT)
+            .height(GraphStyle.CHANGES_ROW_HEIGHT)
             .background(if (selected) colors.selectedRow else colors.background)
             .semantics { this.selected = selected }
             .testTag(UiTestTags.CHANGES_ROW)
@@ -286,16 +331,73 @@ private fun ChangesGraphRow(
             .padding(horizontal = GraphStyle.GRAPH_ROW_PADDING),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = "○",
-            color = colors.primary,
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.width(GraphStyle.LANE_WIDTH),
+        WorkingTreeLane(
+            laneWidth = laneWidth,
+            workingLane = workingLane,
+            laneOffset = laneOffset,
+            connectToCommit = connectToCommit,
         )
         Text(
-            text = "Changes ($changeCount)",
-            style = MaterialTheme.typography.titleSmall,
+            text = changedFilesLabel(changeCount, stagedCount, unstagedCount),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (changeCount == 0) FontWeight.Normal else FontWeight.Bold,
             color = colors.onSurface,
+            modifier = Modifier
+                .weight(GraphStyle.FILL_WEIGHT)
+                .padding(horizontal = GraphStyle.SPACE_SM),
+        )
+    }
+}
+
+internal fun changedFilesLabel(
+    changeCount: Int,
+    stagedCount: Int,
+    unstagedCount: Int,
+): String {
+    val details = buildList {
+        if (stagedCount > 0) add("Staged ($stagedCount)")
+        if (unstagedCount > 0) add("Unstaged ($unstagedCount)")
+    }
+    return if (details.isEmpty()) {
+        "Changed files ($changeCount)"
+    } else {
+        "Changed files ($changeCount): ${details.joinToString(", ")}"
+    }
+}
+
+@Composable
+private fun WorkingTreeLane(
+    laneWidth: androidx.compose.ui.unit.Dp,
+    workingLane: Int,
+    laneOffset: Int,
+    connectToCommit: Boolean,
+) {
+    val colors = LocalGraphColors.current
+    Canvas(
+        modifier = Modifier
+            .width(laneWidth)
+            .fillMaxHeight(),
+    ) {
+        val dash = GraphStyle.WORKING_TREE_DASH_ON.toPx()
+        val gap = GraphStyle.WORKING_TREE_DASH_OFF.toPx()
+        val lane = GraphStyle.LANE_WIDTH.toPx()
+        val centerX = (workingLane - laneOffset) * lane + lane / GraphStyle.CENTER_FACTOR
+        val centerY = size.height / GraphStyle.CENTER_FACTOR
+        val radius = GraphStyle.NODE_RADIUS.toPx()
+        if (connectToCommit) {
+            drawLine(
+                color = colors.onSurfaceMuted,
+                start = Offset(centerX, centerY + radius + GraphStyle.WORKING_TREE_BALL_GAP.toPx()),
+                end = Offset(centerX, size.height),
+                strokeWidth = GraphStyle.STROKE_WIDTH.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(dash, gap)),
+            )
+        }
+        drawCircle(
+            color = colors.primary,
+            radius = radius,
+            center = Offset(centerX, centerY),
+            style = Stroke(width = GraphStyle.STROKE_WIDTH.toPx()),
         )
     }
 }
@@ -307,18 +409,27 @@ private fun CommitGraphRow(
     refs: List<GitRef>,
     isHead: Boolean,
     isSelected: Boolean,
+    workingTreeLane: Int?,
+    workingTreeRow: Int,
     visibleLanes: Int,
     laneOffset: Int,
+    viewMode: HistoryViewMode,
+    showDate: Boolean,
     onClick: () -> Unit,
 ) {
     val colors = LocalGraphColors.current
     val hash = graph.hash(row)
     val laneWidth = GraphStyle.LANE_WIDTH * visibleLanes.toFloat()
+    val rowHeight = if (viewMode == HistoryViewMode.COMFORTABLE) {
+        GraphStyle.COMFORTABLE_ROW_HEIGHT
+    } else {
+        GraphStyle.ROW_HEIGHT
+    }
     Box(Modifier.testTag(UiTestTags.commitRow(row)).clickable(onClick = onClick)) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(GraphStyle.ROW_HEIGHT)
+                .height(rowHeight)
                 .background(if (isSelected) colors.selectedRow else colors.background)
                 .semantics { selected = isSelected }
                 .testTag(UiTestTags.commitRowForHash(hash))
@@ -332,37 +443,123 @@ private fun CommitGraphRow(
                 laneWidth = laneWidth,
                 laneOffset = laneOffset,
                 isHead = isHead,
+                workingTreeLane = workingTreeLane,
+                workingTreeRow = workingTreeRow,
             )
+            when (viewMode) {
+                HistoryViewMode.COMPACT -> CompactCommitDetails(
+                    subject = graph.subject(row),
+                    author = graph.author(row),
+                    refs = refs,
+                    isHead = isHead,
+                    hash = hash,
+                )
+                HistoryViewMode.COMFORTABLE -> ComfortableCommitDetails(
+                    subject = graph.subject(row),
+                    author = graph.author(row),
+                    refs = refs,
+                    isHead = isHead,
+                    hash = hash,
+                )
+            }
+            if (showDate) {
+                HistoryDate(hash = hash, timeSec = graph.timeSec(row))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.CompactCommitDetails(
+    subject: String,
+    author: String,
+    refs: List<GitRef>,
+    isHead: Boolean,
+    hash: String,
+) {
+    val colors = LocalGraphColors.current
+    Text(
+        text = subject,
+        style = MaterialTheme.typography.bodyMedium,
+        color = colors.onSurface,
+        maxLines = GraphStyle.MAX_TEXT_LINES,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .weight(GraphStyle.FILL_WEIGHT)
+            .padding(horizontal = GraphStyle.SPACE_SM)
+            .testTag(UiTestTags.historySubject(hash)),
+    )
+    RefChips(refs = refs, isHead = isHead)
+    Text(
+        text = author,
+        style = MaterialTheme.typography.bodySmall,
+        color = colors.onSurfaceMuted,
+        maxLines = GraphStyle.MAX_TEXT_LINES,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier
+            .width(GraphStyle.AUTHOR_COLUMN_WIDTH)
+            .padding(start = GraphStyle.SPACE_MD)
+            .testTag(UiTestTags.historyAuthor(hash)),
+    )
+}
+
+@Composable
+private fun RowScope.ComfortableCommitDetails(
+    subject: String,
+    author: String,
+    refs: List<GitRef>,
+    isHead: Boolean,
+    hash: String,
+) {
+    val colors = LocalGraphColors.current
+    Column(
+        modifier = Modifier
+            .weight(GraphStyle.FILL_WEIGHT)
+            .padding(horizontal = GraphStyle.SPACE_SM),
+        verticalArrangement = Arrangement.spacedBy(GraphStyle.SPACE_XXS),
+    ) {
+        Text(
+            text = subject,
+            style = MaterialTheme.typography.bodyMedium,
+            color = colors.onSurface,
+            maxLines = GraphStyle.MAX_TEXT_LINES,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(UiTestTags.historySubject(hash)),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = graph.subject(row),
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurface,
+                text = author,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceMuted,
                 maxLines = GraphStyle.MAX_TEXT_LINES,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(GraphStyle.FILL_WEIGHT)
-                    .padding(horizontal = GraphStyle.SPACE_SM),
+                    .testTag(UiTestTags.historyAuthor(hash)),
             )
             RefChips(refs = refs, isHead = isHead)
-            Text(
-                text = graph.author(row),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceMuted,
-                maxLines = GraphStyle.MAX_TEXT_LINES,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .width(GraphStyle.AUTHOR_COLUMN_WIDTH)
-                    .padding(start = GraphStyle.SPACE_MD),
-            )
-            Text(
-                text = formatDate(graph.timeSec(row)),
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceMuted,
-                maxLines = GraphStyle.MAX_TEXT_LINES,
-                modifier = Modifier.width(GraphStyle.DATE_COLUMN_WIDTH),
-            )
         }
     }
+}
+
+@Composable
+private fun HistoryDate(hash: String, timeSec: Long) {
+    val colors = LocalGraphColors.current
+    Text(
+        text = formatDate(timeSec),
+        style = MaterialTheme.typography.bodySmall,
+        color = colors.onSurfaceMuted,
+        maxLines = GraphStyle.MAX_TEXT_LINES,
+        textAlign = TextAlign.Center,
+        modifier = Modifier
+            .width(GraphStyle.DATE_COLUMN_WIDTH)
+            .testTag(UiTestTags.historyDate(hash)),
+    )
 }
 
 @Composable
@@ -372,6 +569,8 @@ private fun LaneCanvas(
     laneWidth: androidx.compose.ui.unit.Dp,
     laneOffset: Int,
     isHead: Boolean,
+    workingTreeLane: Int?,
+    workingTreeRow: Int,
 ) {
     val colors = LocalGraphColors.current
     val density = LocalDensity.current
@@ -397,11 +596,16 @@ private fun LaneCanvas(
     ) {
         val lane = GraphStyle.LANE_WIDTH.toPx()
         val halfHeight = size.height / GraphStyle.CENTER_FACTOR
-        val arrow = GraphStyle.ARROW_SIZE.toPx()
         fun x(laneIndex: Int): Float = (laneIndex - laneOffset) * lane + lane / GraphStyle.CENTER_FACTOR
 
         for (index in 0 until segments.size) {
             val segment = segments[index]
+            val workingTreeSegment = workingTreeLane != null &&
+                row <= workingTreeRow &&
+                segment.from == workingTreeLane &&
+                (segment.kind == SegKind.PASS ||
+                    (row == workingTreeRow && segment.kind == SegKind.IN))
+            if (workingTreeSegment) continue
             val color = colors.lanePalette[Math.floorMod(segment.color, colors.lanePalette.size)]
             val fromX = x(segment.from)
             val toX = x(segment.to)
@@ -432,12 +636,6 @@ private fun LaneCanvas(
                         path.cubicTo(fromX, curveY, toX, curveY, toX, size.height)
                     }
                     drawPath(path, color, style = stroke)
-                    if (segment.merge) {
-                        val tipY = if (GraphStyle.ARROW_TOWARD_PARENT) size.height else halfHeight
-                        val baseY = if (GraphStyle.ARROW_TOWARD_PARENT) tipY - arrow else tipY + arrow
-                        drawLine(color, Offset(toX, tipY), Offset(toX - arrow, baseY), GraphStyle.STROKE_WIDTH.toPx())
-                        drawLine(color, Offset(toX, tipY), Offset(toX + arrow, baseY), GraphStyle.STROKE_WIDTH.toPx())
-                    }
                 }
             }
         }
@@ -445,6 +643,37 @@ private fun LaneCanvas(
         val nodeX = x(nodeLane)
         val nodeY = halfHeight
         val radius = GraphStyle.NODE_RADIUS.toPx()
+        if (workingTreeLane != null && row <= workingTreeRow) {
+            val linkX = x(workingTreeLane)
+            val dashStroke = Stroke(
+                width = GraphStyle.STROKE_WIDTH.toPx(),
+                pathEffect = PathEffect.dashPathEffect(
+                    floatArrayOf(
+                        GraphStyle.WORKING_TREE_DASH_ON.toPx(),
+                        GraphStyle.WORKING_TREE_DASH_OFF.toPx(),
+                    ),
+                ),
+            )
+            if (row == workingTreeRow) {
+                val curveY = nodeY * GraphStyle.CURVE_CONTROL_FRACTION
+                path.reset()
+                path.moveTo(linkX, 0f)
+                if (linkX == nodeX) {
+                    path.lineTo(nodeX, nodeY)
+                } else {
+                    path.cubicTo(linkX, curveY, nodeX, curveY, nodeX, nodeY)
+                }
+                drawPath(path, colors.onSurfaceMuted, style = dashStroke)
+            } else {
+                drawLine(
+                    color = colors.onSurfaceMuted,
+                    start = Offset(linkX, 0f),
+                    end = Offset(linkX, size.height),
+                    strokeWidth = GraphStyle.STROKE_WIDTH.toPx(),
+                    pathEffect = dashStroke.pathEffect,
+                )
+            }
+        }
         if (isHead) {
             drawCircle(
                 color = colors.headHalo,
@@ -471,7 +700,18 @@ private fun RefChips(refs: List<GitRef>, isHead: Boolean) {
     val colors = LocalGraphColors.current
     val allChips = buildList {
         if (isHead) add(ChipLabel("HEAD", RefKind.LOCAL_BRANCH, head = true))
-        refs.forEach { add(ChipLabel(it.shortName, it.kind, head = false)) }
+        val current = refs.filter { it.isCurrentBranch }
+        val others = refs.filterNot { it.isCurrentBranch }
+        (current + others).forEach {
+            add(
+                ChipLabel(
+                    text = it.shortName,
+                    kind = it.kind,
+                    head = false,
+                    currentBranch = it.isCurrentBranch,
+                ),
+            )
+        }
     }
     if (allChips.isEmpty()) return
     val visible = allChips.take(GraphStyle.CHIP_MAX)
@@ -481,8 +721,18 @@ private fun RefChips(refs: List<GitRef>, isHead: Boolean) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         visible.forEach { chip ->
-            val (background, foreground) = chipAppearance(chip.kind, chip.head, colors)
-            Chip(text = chip.text, background = background, foreground = foreground)
+            val (background, foreground) = chipAppearance(
+                kind = chip.kind,
+                isHead = chip.head,
+                isCurrentBranch = chip.currentBranch,
+                colors = colors,
+            )
+            Chip(
+                text = chip.text,
+                background = background,
+                foreground = foreground,
+                bold = chip.head || chip.currentBranch,
+            )
         }
         if (hidden.isNotEmpty()) {
             TooltipArea(
@@ -511,10 +761,20 @@ private fun RefChips(refs: List<GitRef>, isHead: Boolean) {
     }
 }
 
-private data class ChipLabel(val text: String, val kind: RefKind, val head: Boolean)
+private data class ChipLabel(
+    val text: String,
+    val kind: RefKind,
+    val head: Boolean,
+    val currentBranch: Boolean = false,
+)
 
 @Composable
-private fun Chip(text: String, background: Color, foreground: Color) {
+private fun Chip(
+    text: String,
+    background: Color,
+    foreground: Color,
+    bold: Boolean = false,
+) {
     Box(
         modifier = Modifier
             .background(background, RoundedCornerShape(GraphStyle.CHIP_CORNER_RADIUS))
@@ -523,6 +783,7 @@ private fun Chip(text: String, background: Color, foreground: Color) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             color = foreground,
             maxLines = GraphStyle.MAX_TEXT_LINES,
         )

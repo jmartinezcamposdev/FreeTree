@@ -40,6 +40,15 @@ enum class FakeMethod(val write: Boolean = false) {
     COMMIT(write = true),
     PUSH(write = true),
     PULL(write = true),
+    CHECKOUT_LOCAL(write = true),
+    CHECKOUT_DETACHED(write = true),
+    CHECKOUT_REMOTE(write = true),
+    CREATE_BRANCH(write = true),
+    CREATE_TAG(write = true),
+    DELETE_LOCAL_BRANCH(write = true),
+    DELETE_REMOTE_BRANCH(write = true),
+    REACHABLE_FROM_HEAD,
+    BRANCHES_CONTAINING,
     GIT_DIRS,
 }
 
@@ -52,6 +61,10 @@ data class BackendCall(
     val target: DiffTarget? = null,
     val unlimited: Boolean = false,
     val message: String? = null,
+    val branch: String? = null,
+    val remote: String? = null,
+    val name: String? = null,
+    val force: Boolean = false,
 )
 
 class SuspensionGate internal constructor() {
@@ -93,6 +106,8 @@ class FakeGitBackend(
     commitDetails: Map<String, CommitDetail> = emptyMap(),
     changedFiles: Map<String, List<FileChange>> = emptyMap(),
     diffs: Map<DiffTarget, DiffText> = emptyMap(),
+    branchesContaining: Map<String, List<String>> = emptyMap(),
+    reachableFromHead: Set<String> = emptySet(),
     private val statefulWrites: Boolean = false,
 ) : GitBackend {
 
@@ -133,6 +148,13 @@ class FakeGitBackend(
 
     @Volatile
     var diffs: Map<DiffTarget, DiffText> = diffs.toMap()
+
+    @Volatile
+    var branchesContaining: Map<String, List<String>> =
+        branchesContaining.mapValues { it.value.toList() }
+
+    @Volatile
+    var reachableFromHead: Set<String> = reachableFromHead.toSet()
 
     @Volatile
     var logDelayMillis: Long = 0L
@@ -292,6 +314,47 @@ class FakeGitBackend(
 
     override suspend fun pull(): GitResult = call(FakeMethod.PULL) { resultFor(FakeMethod.PULL) }
 
+    override suspend fun checkoutLocal(branch: String): GitResult =
+        call(FakeMethod.CHECKOUT_LOCAL, branch = branch) { resultFor(FakeMethod.CHECKOUT_LOCAL) }
+
+    override suspend fun checkoutDetached(hash: String): GitResult =
+        call(FakeMethod.CHECKOUT_DETACHED, hash = hash) { resultFor(FakeMethod.CHECKOUT_DETACHED) }
+
+    override suspend fun checkoutRemoteAsLocal(
+        localBranch: String,
+        remoteRef: String,
+    ): GitResult = call(
+        FakeMethod.CHECKOUT_REMOTE,
+        branch = localBranch,
+        name = remoteRef,
+    ) { resultFor(FakeMethod.CHECKOUT_REMOTE) }
+
+    override suspend fun createBranchAndCheckout(name: String, startHash: String): GitResult =
+        call(FakeMethod.CREATE_BRANCH, hash = startHash, name = name) {
+            resultFor(FakeMethod.CREATE_BRANCH)
+        }
+
+    override suspend fun createTag(name: String, hash: String): GitResult =
+        call(FakeMethod.CREATE_TAG, hash = hash, name = name) {
+            resultFor(FakeMethod.CREATE_TAG)
+        }
+
+    override suspend fun deleteLocalBranch(name: String, force: Boolean): GitResult =
+        call(FakeMethod.DELETE_LOCAL_BRANCH, branch = name, force = force) {
+            resultFor(FakeMethod.DELETE_LOCAL_BRANCH)
+        }
+
+    override suspend fun deleteRemoteBranch(remote: String, branch: String): GitResult =
+        call(FakeMethod.DELETE_REMOTE_BRANCH, remote = remote, branch = branch) {
+            resultFor(FakeMethod.DELETE_REMOTE_BRANCH)
+        }
+
+    override suspend fun isCommitReachableFromHead(hash: String): Boolean =
+        call(FakeMethod.REACHABLE_FROM_HEAD, hash = hash) { hash in reachableFromHead }
+
+    override suspend fun localBranchesContaining(hash: String): List<String> =
+        call(FakeMethod.BRANCHES_CONTAINING, hash = hash) { branchesContaining[hash].orEmpty() }
+
     override suspend fun gitDirs(): GitDirs = call(FakeMethod.GIT_DIRS) { dirs }
 
     private suspend fun <T> call(
@@ -302,9 +365,13 @@ class FakeGitBackend(
         target: DiffTarget? = null,
         unlimited: Boolean = false,
         message: String? = null,
+        branch: String? = null,
+        remote: String? = null,
+        name: String? = null,
+        force: Boolean = false,
         block: suspend () -> T,
     ): T {
-        begin(method, spec, hash, paths, target, unlimited, message)
+        begin(method, spec, hash, paths, target, unlimited, message, branch, remote, name, force)
         try {
             passGate(method)
             throwIfFailing(method)
@@ -322,6 +389,10 @@ class FakeGitBackend(
         target: DiffTarget? = null,
         unlimited: Boolean = false,
         message: String? = null,
+        branch: String? = null,
+        remote: String? = null,
+        name: String? = null,
+        force: Boolean = false,
     ) {
         synchronized(lock) {
             callLog += BackendCall(
@@ -333,6 +404,10 @@ class FakeGitBackend(
                 target = target,
                 unlimited = unlimited,
                 message = message,
+                branch = branch,
+                remote = remote,
+                name = name,
+                force = force,
             )
             activeCalls++
             peakCalls = maxOf(peakCalls, activeCalls)
@@ -447,6 +522,7 @@ class FakeGitBackend(
             authorName = "Fake Analyst",
             authorTimeSec = now,
             subject = message.lineSequence().firstOrNull().orEmpty(),
+            authorEmail = "fake.analyst@example.com",
         )
         val changed = staged.map { entry ->
             FileChange(

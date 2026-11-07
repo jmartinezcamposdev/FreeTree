@@ -56,12 +56,14 @@ class SyntheticDagGenerator(
 
         fun addCommit(parentIndices: List<Int>, subject: String): Int {
             val index = commitsOldestFirst.size
+            val author = authors[random.nextInt(authors.size)]
             commitsOldestFirst += RawCommit(
                 hash = hashes[index],
                 parents = parentIndices.map { hashes[it] },
-                authorName = authors[random.nextInt(authors.size)],
+                authorName = author,
                 authorTimeSec = BASE_TIME_SEC + index * 60L,
                 subject = subject,
+                authorEmail = author.lowercase().replace(' ', '.') + "@example.com",
             )
             return index
         }

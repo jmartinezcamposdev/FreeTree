@@ -10,6 +10,9 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.jmartinezcampos.freetree.app.App
+import com.jmartinezcampos.freetree.app.smoke.saveScreenshot
+import com.jmartinezcampos.freetree.core.model.DiffTarget
+import com.jmartinezcampos.freetree.core.model.DiffText
 import com.jmartinezcampos.freetree.core.model.GitRef
 import com.jmartinezcampos.freetree.core.model.HeadInfo
 import com.jmartinezcampos.freetree.core.model.RawCommit
@@ -64,7 +67,7 @@ class ChangesPanelUiTest {
                     fixture.manager.activeSession.value?.state?.value?.status != null
                 }
 
-                onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changes (5)")
+                onNodeWithTag(UiTestTags.CHANGES_ROW).assertTextContains("Changed files (5)", substring = true)
                 onNodeWithTag(UiTestTags.CONFLICTS_SECTION).assertExists()
                 onNodeWithTag(UiTestTags.STAGED_SECTION).assertExists()
                 onNodeWithTag(UiTestTags.UNSTAGED_SECTION).assertExists()
@@ -91,6 +94,51 @@ class ChangesPanelUiTest {
                     fixture.backend.callCount(FakeMethod.STAGE) == 1
                 }
                 assertEquals(listOf("README.md"), fixture.backend.callsOf(FakeMethod.STAGE).single().paths)
+            } finally {
+                fixture.close()
+            }
+        }
+
+    @Test
+    fun deletingOpenUnstagedFileClosesDiffAndShowsCleanState() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val status = WorkingStatus(
+                commits[1].hash,
+                null,
+                0,
+                0,
+                false,
+                listOf(StatusEntry("README.md", null, ' ', 'M', StatusKind.ORDINARY)),
+            )
+            val target = DiffTarget.Unstaged("README.md")
+            val fixture = uiFixture(
+                commits = commits,
+                refs = refs,
+                head = HeadInfo(commits[1].hash, "main"),
+                status = status,
+                diffs = mapOf(target to DiffText(emptyList(), binary = false, truncated = false)),
+            )
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.status != null
+                }
+
+                onNodeWithTag(UiTestTags.unstagedFile("README.md")).performClick()
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.openDiff != null
+                }
+                onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
+
+                fixture.backend.status = status.copy(entries = emptyList())
+                fixture.manager.activeSession.value!!.refresh()
+                waitUntil(timeoutMillis = 5_000) {
+                    val state = fixture.manager.activeSession.value?.state?.value
+                    state?.status?.entries?.isEmpty() == true && state.openDiffTarget == null
+                }
+
+                onNodeWithTag(UiTestTags.DIFF_VIEW).assertDoesNotExist()
+                onNodeWithText("Working tree clean").assertExists()
             } finally {
                 fixture.close()
             }
@@ -128,12 +176,55 @@ class ChangesPanelUiTest {
                 onNodeWithTag(UiTestTags.discardUnstaged("README.md")).performClick()
                 onNodeWithText("restores \"README.md\" from the index", substring = true).assertExists()
                 onNodeWithText("The staged content is kept.", substring = true).assertExists()
+                saveScreenshot("27-discard-file-dialog.png")
                 onNodeWithTag(UiTestTags.DISCARD_CONFIRM).performClick()
                 waitUntil(timeoutMillis = 5_000) {
                     fixture.backend.callCount(FakeMethod.DISCARD_UNSTAGED) == 1
                 }
                 assertEquals(
                     listOf("README.md"),
+                    fixture.backend.callsOf(FakeMethod.DISCARD_UNSTAGED).single().paths,
+                )
+            } finally {
+                fixture.close()
+            }
+        }
+
+    @Test
+    fun discardAllHeaderActionConfirmsAndDiscardsEveryUnstagedPath() =
+        runDesktopComposeUiTest(width = 1400, height = 900) {
+            val fixture = fixture(
+                WorkingStatus(
+                    commits[1].hash,
+                    null,
+                    0,
+                    0,
+                    false,
+                    listOf(
+                        StatusEntry("src/Staged.kt", null, 'M', ' ', StatusKind.ORDINARY),
+                        StatusEntry("README.md", null, ' ', 'M', StatusKind.ORDINARY),
+                        StatusEntry("notes.txt", null, '?', '?', StatusKind.UNTRACKED),
+                    ),
+                ),
+            )
+            try {
+                setContent { App(fixture.manager) }
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.manager.activeSession.value?.state?.value?.status != null
+                }
+
+                onNodeWithTag(UiTestTags.DISCARD_ALL_CHANGES).performClick()
+                onNodeWithTag(UiTestTags.DISCARD_ALL_DIALOG).assertExists()
+                onNodeWithText("Discard unstaged changes in 2 file(s)?", substring = true).assertExists()
+                saveScreenshot("31-discard-all-changes-dialog.png")
+                assertEquals(0, fixture.backend.callCount(FakeMethod.DISCARD_UNSTAGED))
+
+                onNodeWithTag(UiTestTags.DISCARD_ALL_CONFIRM).performClick()
+                waitUntil(timeoutMillis = 5_000) {
+                    fixture.backend.callCount(FakeMethod.DISCARD_UNSTAGED) == 1
+                }
+                assertEquals(
+                    listOf("README.md", "notes.txt"),
                     fixture.backend.callsOf(FakeMethod.DISCARD_UNSTAGED).single().paths,
                 )
             } finally {

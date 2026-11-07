@@ -2,39 +2,317 @@ package com.jmartinezcampos.freetree.app
 
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.res.loadImageBitmap
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.jmartinezcampos.freetree.app.menu.AboutDialog
+import com.jmartinezcampos.freetree.app.menu.AppCommand
+import com.jmartinezcampos.freetree.app.menu.AppMenuBar
+import com.jmartinezcampos.freetree.app.menu.RecentRepositories
+import com.jmartinezcampos.freetree.app.menu.SettingsRecentRepositoriesStore
+import com.jmartinezcampos.freetree.app.menu.stagedPaths
+import com.jmartinezcampos.freetree.app.menu.unstagedPaths
+import com.jmartinezcampos.freetree.app.ui.AppDialog
+import com.jmartinezcampos.freetree.app.ui.AppDialogController
+import com.jmartinezcampos.freetree.app.ui.AppSettingsController
 import com.jmartinezcampos.freetree.app.ui.GraphStyle
+import com.jmartinezcampos.freetree.app.ui.JsonSettingsStore
+import com.jmartinezcampos.freetree.app.ui.LegacySettingsLoader
+import com.jmartinezcampos.freetree.app.ui.MessagesWindow
+import com.jmartinezcampos.freetree.app.ui.PreferencesWindow
+import com.jmartinezcampos.freetree.app.ui.captureWindowState
+import com.jmartinezcampos.freetree.app.ui.readDesktopScreens
+import com.jmartinezcampos.freetree.app.ui.UiTestTags
+import com.jmartinezcampos.freetree.app.ui.readLegacySettings
+import com.jmartinezcampos.freetree.app.ui.resolveWindowBounds
+import com.jmartinezcampos.freetree.core.session.MessageLog
+import com.jmartinezcampos.freetree.core.session.RepoSession
 import com.jmartinezcampos.freetree.core.session.SessionManager
+import java.awt.Desktop
+import java.awt.Frame
 import java.nio.file.InvalidPathException
 import java.nio.file.Path
-import javax.swing.JFileChooser
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 
-fun main(args: Array<String>) = application {
-    val startupRepository = startupRepository(args)
-    val manager = remember {
-        SessionManager(restore = startupRepository == null)
-    }
+private val appFolderPicker = NativeFolderPicker()
 
-    LaunchedEffect(startupRepository) {
-        startupRepository?.let(manager::openRepo)
-    }
-    DisposableEffect(Unit) { onDispose { manager.close() } }
-
-    Window(
-        onCloseRequest = ::exitApplication,
-        title = "FreeTree",
-        state = rememberWindowState(
-            width = GraphStyle.WINDOW_WIDTH,
-            height = GraphStyle.WINDOW_HEIGHT,
-        ),
-    ) {
-        App(
-            sessionManager = manager,
-            onOpenRepository = { chooseRepository(manager) },
+fun main(args: Array<String>) {
+    System.setProperty("apple.awt.application.name", "FreeTree")
+    System.setProperty("com.apple.mrj.application.apple.menu.about.name", "FreeTree")
+    val aboutRequests = MutableStateFlow(false)
+    installMacAboutHandler { aboutRequests.value = true }
+    val preferencesRequests = MutableStateFlow(false)
+    installMacPreferencesHandler { preferencesRequests.value = true }
+    application {
+        val startupRepository = startupRepository(args)
+        val messageLog = remember { MessageLog() }
+        val settingsController = remember {
+            AppSettingsController(
+                store = JsonSettingsStore(),
+                legacyLoader = LegacySettingsLoader { readLegacySettings() },
+            )
+        }
+        val settings by settingsController.state.collectAsState()
+        val dialogController = remember { AppDialogController() }
+        val themeMode = settings.themeMode
+        val historyViewMode = settings.historyViewMode
+        val showHistoryDate = settings.showHistoryDate
+        val initialWindowBounds = remember(settingsController) {
+            val desktop = readDesktopScreens()
+            resolveWindowBounds(
+                saved = settingsController.state.value.window,
+                screens = desktop.screens,
+                primaryId = desktop.primaryId,
+                defaultWidth = GraphStyle.WINDOW_WIDTH.value.roundToInt(),
+                defaultHeight = GraphStyle.WINDOW_HEIGHT.value.roundToInt(),
+                minWidth = GraphStyle.WINDOW_MIN_WIDTH.value.roundToInt(),
+                minHeight = GraphStyle.WINDOW_MIN_HEIGHT.value.roundToInt(),
+            )
+        }
+        val windowState = rememberWindowState(
+            position = WindowPosition(initialWindowBounds.x.dp, initialWindowBounds.y.dp),
+            size = DpSize(initialWindowBounds.width.dp, initialWindowBounds.height.dp),
         )
+        val manager = remember {
+            SessionManager(messageLog = messageLog, restore = startupRepository == null)
+        }
+        val recentRepositories = remember(settingsController) {
+            RecentRepositories(SettingsRecentRepositoriesStore(settingsController))
+        }
+        val activeSession by manager.activeSession.collectAsState()
+        val aboutRequested by aboutRequests.collectAsState()
+        val preferencesRequested by preferencesRequests.collectAsState()
+        val home = remember { Path.of(System.getProperty("user.home")) }
+        val openRepository: (Path) -> Unit = remember(manager, recentRepositories) {
+            { path ->
+                manager.openRepo(path)
+                recentRepositories.record(path)
+            }
+        }
+        var showAbout by remember { mutableStateOf(false) }
+        var showMessages by remember { mutableStateOf(false) }
+        var showPreferences by remember { mutableStateOf(false) }
+
+        LaunchedEffect(aboutRequested) {
+            if (aboutRequested) {
+                showAbout = true
+                aboutRequests.value = false
+            }
+        }
+
+        LaunchedEffect(preferencesRequested) {
+            if (preferencesRequested) {
+                showPreferences = true
+                preferencesRequests.value = false
+            }
+        }
+
+        fun activateRelativeTab(delta: Int) {
+            val tabs = manager.tabs.value
+            if (tabs.isEmpty()) return
+            val current = tabs.indexOfFirst { it.id == manager.activeId.value }
+            val next = if (current < 0) 0 else (current + delta).mod(tabs.size)
+            manager.activate(tabs[next].id)
+        }
+
+        LaunchedEffect(startupRepository) {
+            startupRepository?.let(openRepository)
+        }
+        DisposableEffect(Unit) { onDispose { manager.close() } }
+
+        // macOS uses the bundle icon and ignores per-window icons.
+        val windowIcon = remember {
+            if (isMacOs()) {
+                null
+            } else {
+                object {}.javaClass.getResourceAsStream("/FreeTree.png")
+                    ?.use(::loadImageBitmap)
+                    ?.let { BitmapPainter(it) }
+            }
+        }
+
+        Window(
+            icon = windowIcon,
+            onCloseRequest = {
+                saveWindowState(windowState, settingsController)
+                exitApplication()
+            },
+            title = windowTitle(activeSession?.path, home),
+            state = windowState,
+        ) {
+            val currentWindow = window
+            DisposableEffect(currentWindow, windowState, settingsController) {
+                onDispose {
+                    saveWindowState(
+                        windowState,
+                        settingsController,
+                        monitorId = currentWindow.graphicsConfiguration?.device?.getIDstring(),
+                    )
+                }
+            }
+            LaunchedEffect(currentWindow, windowState, settingsController) {
+                snapshotFlow { windowState.position to windowState.size }
+                    .collectLatest {
+                        delay(WINDOW_STATE_SAVE_DELAY_MILLIS)
+                        saveWindowState(
+                            windowState,
+                            settingsController,
+                            monitorId = currentWindow.graphicsConfiguration?.device?.getIDstring(),
+                        )
+                    }
+            }
+
+            fun handleCommand(command: AppCommand) {
+                val session = manager.activeSession.value
+                when (command) {
+                    AppCommand.OpenRepository -> chooseRepository(openRepository, window)
+                    is AppCommand.OpenRecent -> openRepository(command.path)
+                    AppCommand.CloseTab -> manager.activeId.value?.let(manager::closeTab)
+                    AppCommand.Exit -> exitApplication()
+                    AppCommand.Reload -> session?.refresh()
+                    AppCommand.Pull -> session?.pull()
+                    AppCommand.Push -> session?.push()
+                    AppCommand.StageAll -> session?.let { active ->
+                        val paths = active.state.value.status.unstagedPaths()
+                        if (paths.isNotEmpty()) active.stage(paths)
+                    }
+                    AppCommand.UnstageAll -> session?.let { active ->
+                        val paths = active.state.value.status.stagedPaths()
+                        if (paths.isNotEmpty()) active.unstage(paths)
+                    }
+                    AppCommand.DiscardUnstaged -> session?.let { active ->
+                        val paths = active.state.value.status.unstagedPaths()
+                        if (paths.isNotEmpty()) {
+                            dialogController.show(
+                                AppDialog.Confirm(
+                                    tag = UiTestTags.DISCARD_ALL_DIALOG,
+                                    title = "Discard unstaged changes",
+                                    message = "Discard unstaged changes in ${paths.size} file(s)?",
+                                    warning = "Tracked files will be restored from the index. Untracked files " +
+                                        "will be deleted from disk.",
+                                    confirmLabel = "Discard",
+                                    destructive = true,
+                                    onConfirm = { active.discardUnstaged(paths) },
+                                ),
+                            )
+                        }
+                    }
+                    AppCommand.ShowRemotes -> session?.let { active ->
+                        active.setShowRemotes(!active.state.value.showRemotes)
+                    }
+                    AppCommand.ShowTags -> session?.let { active ->
+                        active.setShowTags(!active.state.value.showTags)
+                    }
+                    AppCommand.NextTab -> activateRelativeTab(1)
+                    AppCommand.PreviousTab -> activateRelativeTab(-1)
+                    AppCommand.Minimize -> window.extendedState =
+                        window.extendedState or Frame.ICONIFIED
+                    AppCommand.About -> showAbout = true
+                    AppCommand.MessagesLog -> showMessages = true
+                    AppCommand.Preferences -> showPreferences = true
+                }
+            }
+
+            AppMenuBar(
+                sessionManager = manager,
+                recentRepositories = recentRepositories,
+                onCommand = ::handleCommand,
+            )
+            App(
+                sessionManager = manager,
+                onOpenRepository = { chooseRepository(openRepository, window) },
+                settingsController = settingsController,
+                dialogController = dialogController,
+                themeMode = themeMode,
+                historyViewMode = historyViewMode,
+                showHistoryDate = showHistoryDate,
+            )
+            if (showAbout) {
+                AboutDialog(
+                    themeMode = themeMode,
+                    onDismiss = { showAbout = false },
+                )
+            }
+        }
+        if (showMessages) {
+            MessagesWindow(
+                messageLog = messageLog,
+                themeMode = themeMode,
+                onDismiss = { showMessages = false },
+            )
+        }
+        if (showPreferences) {
+            PreferencesWindow(
+                themeMode = themeMode,
+                onThemeModeChange = settingsController::setThemeMode,
+                historyViewMode = historyViewMode,
+                onHistoryViewModeChange = settingsController::setHistoryViewMode,
+                showHistoryDate = showHistoryDate,
+                onShowHistoryDateChange = settingsController::setShowHistoryDate,
+                onDismiss = { showPreferences = false },
+            )
+        }
+    }
+}
+
+private const val WINDOW_STATE_SAVE_DELAY_MILLIS = 350L
+
+private fun saveWindowState(
+    windowState: WindowState,
+    settingsController: AppSettingsController,
+    monitorId: String? = null,
+) {
+    val saved = captureWindowState(
+        windowState = windowState,
+        desktop = readDesktopScreens(),
+        monitorId = monitorId,
+    ) ?: return
+    settingsController.setWindow(saved)
+}
+
+private fun isMacOs(): Boolean =
+    System.getProperty("os.name").orEmpty().startsWith("Mac", ignoreCase = true)
+
+private fun installMacAboutHandler(onAbout: () -> Unit) {
+    if (!isMacOs()) return
+    try {
+        if (Desktop.isDesktopSupported()) {
+            val desktop = Desktop.getDesktop()
+            if (desktop.isSupported(Desktop.Action.APP_ABOUT)) {
+                desktop.setAboutHandler { onAbout() }
+            }
+        }
+    } catch (e: Exception) {
+        System.err.println("FreeTree: cannot install the macOS About handler: ${e.message}")
+    }
+}
+
+private fun installMacPreferencesHandler(onPreferences: () -> Unit) {
+    if (!isMacOs()) return
+    try {
+        if (Desktop.isDesktopSupported()) {
+            val desktop = Desktop.getDesktop()
+            if (desktop.isSupported(Desktop.Action.APP_PREFERENCES)) {
+                desktop.setPreferencesHandler { onPreferences() }
+            }
+        }
+    } catch (e: Exception) {
+        System.err.println("FreeTree: cannot install the macOS Preferences handler: ${e.message}")
     }
 }
 
@@ -48,12 +326,6 @@ private fun startupRepository(args: Array<String>): Path? {
     }
 }
 
-private fun chooseRepository(manager: SessionManager) {
-    val chooser = JFileChooser().apply {
-        dialogTitle = "Open Git repository"
-        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
-    }
-    if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
-        chooser.selectedFile?.toPath()?.let(manager::openRepo)
-    }
+private fun chooseRepository(onOpen: (Path) -> Unit, owner: java.awt.Window?) {
+    appFolderPicker.pickFolder(owner)?.let(onOpen)
 }

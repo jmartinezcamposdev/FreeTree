@@ -36,6 +36,13 @@ class KeyboardNavigationUiTest {
             onNodeWithTag(UiTestTags.GRAPH_LIST).requestFocus()
             waitForIdle()
 
+            pressKey(Key.DirectionUp)
+            waitForIdle()
+            assertEquals(
+                Selection.WorkingTree,
+                fixture.manager.activeSession.value?.state?.value?.selection,
+            )
+
             pressKey(Key.DirectionDown)
             waitUntil(timeoutMillis = 5_000) { selectedHash(fixture) == commits[0].hash }
             onNodeWithTag(UiTestTags.commitRowForHash(commits[0].hash)).assertIsSelected()

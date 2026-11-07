@@ -1,13 +1,11 @@
 package com.jmartinezcampos.freetree.app.acceptance
 
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.DesktopComposeUiTest
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
@@ -41,7 +39,6 @@ class RealAppAcceptanceTest {
                 repo.writeFile("README.md", "line one\n")
                 repo.commitAll("Initial commit")
                 val origin = repo.createBareOrigin()
-                repo.git("push", "-u", "origin", "main").requireSuccess()
                 repo.writeFile("src/App.kt", "fun main() = Unit\n")
                 val appCommit = repo.commitAll("Add app")
                 repo.writeFile("README.md", "line one\nlocal change\n")
@@ -65,7 +62,7 @@ class RealAppAcceptanceTest {
                 onNodeWithTag(UiTestTags.changedFile("src/App.kt")).performClick()
                 waitUntil(timeoutMillis = 20_000) { state(manager).openDiff != null }
                 onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
-                onNodeWithText("+fun main() = Unit").assertExists()
+                onNodeWithText("fun main() = Unit").assertExists()
 
                 onNodeWithTag(UiTestTags.CHANGES_ROW).performClick()
                 awaitStatus(manager) { it.path == "README.md" && it.worktree == 'M' }
@@ -123,10 +120,12 @@ class RealAppAcceptanceTest {
 
                 onNodeWithTag(UiTestTags.PUSH).performClick()
                 awaitCondition("push reaches the bare origin") {
-                    repo.gitIn(origin.path, "rev-parse", "refs/heads/main")
-                        .requireSuccess()
-                        .stdout
-                        .trim() == committedHead
+                    val result = repo.gitIn(origin.path, "rev-parse", "--verify", "-q", "refs/heads/main")
+                    result.succeeded && result.stdout.trim() == committedHead
+                }
+                awaitCondition("push sets the origin upstream") {
+                    val result = repo.gitIn(repo.workTree, "rev-parse", "--abbrev-ref", "@{upstream}")
+                    result.succeeded && result.stdout.trim() == "origin/main"
                 }
 
                 val remoteHead = GitTestRepo.clone(origin).use { other ->
@@ -243,9 +242,9 @@ class RealAppAcceptanceTest {
                 )
 
                 onNodeWithTag(UiTestTags.commitRowForHash(merge)).assertExists()
-                onNodeWithText("HEAD").assertExists()
+                onNodeWithText("HEAD").assertDoesNotExist()
                 onNodeWithText("release/1.0").assertExists()
-                onNodeWithText("+1").assertExists()
+                onNodeWithText("+1").assertDoesNotExist()
                 onNodeWithText("v1.0").assertExists()
             } finally {
                 manager.close()
@@ -281,14 +280,14 @@ class RealAppAcceptanceTest {
                     diff != null && !diff.binary
                 }
                 onNodeWithTag(UiTestTags.DIFF_VIEW).assertExists()
-                onNodeWithText("+two").assertExists()
+                onNodeWithText("two").assertExists()
 
                 onNodeWithTag(UiTestTags.changedFile("binary.bin")).performClick()
                 waitUntil(timeoutMillis = 20_000) {
                     state(manager).openDiff?.binary == true
                 }
                 onNodeWithTag(UiTestTags.DIFF_BINARY).assertExists()
-                assertTrue(state(manager).openDiff?.lines?.none { it.text == "+two" } == true)
+                assertTrue(state(manager).openDiff?.lines?.none { it.text == "two" } == true)
             } finally {
                 manager.close()
                 repo.close()
@@ -387,8 +386,8 @@ class RealAppAcceptanceTest {
                 manager.openRepo(repo.workTree)
                 awaitLoaded(manager)
 
-                onNodeWithTag(UiTestTags.REFS_TOGGLE).performClick()
-                onNodeWithTag(UiTestTags.refItem("refs/heads/topic")).performClick()
+                val session = manager.activeSession.value!!
+                session.toggleRef("refs/heads/topic")
                 waitUntil(timeoutMillis = 20_000) {
                     val current = state(manager)
                     "refs/heads/topic" in current.hiddenRefs &&
@@ -396,11 +395,7 @@ class RealAppAcceptanceTest {
                         current.graph!!.indexOfHash(topic) < 0
                 }
 
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextReplacement("author:Ada")
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                session.applyQuery("author:Ada")
                 waitUntil(timeoutMillis = 20_000) {
                     val current = state(manager)
                     current.query == "author:Ada" &&
@@ -414,16 +409,11 @@ class RealAppAcceptanceTest {
                 assertTrue(filtered.indexOfHash(topic) < 0)
                 onNodeWithText("Flat view (content filters active)").assertExists()
 
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performTextReplacement("bogus:value")
-                onNodeWithTag(UiTestTags.QUERY_INPUT).performKeyInput {
-                    keyDown(Key.Enter)
-                    keyUp(Key.Enter)
-                }
+                session.applyQuery("bogus:value")
                 waitUntil(timeoutMillis = 20_000) {
                     state(manager).queryError != null
                 }
                 assertSame(filtered, state(manager).graph)
-                onNodeWithTag(UiTestTags.QUERY_ERROR).assertExists()
             } finally {
                 manager.close()
                 repo.close()
